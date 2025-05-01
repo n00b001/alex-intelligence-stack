@@ -15,6 +15,10 @@
 # Where to find models:
 - https://huggingface.co/models
 
+# configure hugginface to help you
+- https://huggingface.co/settings/local-apps
+- add hardware (GPU, CPU/RAM, etc)
+- enable ollama, lmstudio, llama.cpp, vllm
 
 # how to download a model (ollama)
 - `docker exec -it ollama bash`

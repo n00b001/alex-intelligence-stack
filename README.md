@@ -20,6 +20,10 @@
 - add hardware (GPU, CPU/RAM, etc)
 - enable ollama, lmstudio, llama.cpp, vllm
 
+# how to use this repo
+- `docker compose up`
+- I have another compose file that is much more messy, but also includes other services (tabby, comfyUI (for generating images))
+
 # how to download a model (ollama)
 - `docker exec -it ollama bash`
 - Find a model, for example: https://huggingface.co/unsloth/QwQ-32B-GGUF?show_file_info=QwQ-32B-IQ4_XS.gguf

@@ -781,7 +781,7 @@ volumes:
     #         # - comfy-ui-app:/root/ComfyUI
     #     environment:
     #         - "CLI_ARGS=--fast --fp8_e4m3fn-unet --fp8_e4m3fn-text-enc --bf16-vae --use-pytorch-cross-attention --lowvram"
-    #         - "HF_TOKEN=***REMOVED***"
+    #         - "HF_TOKEN="
     #     container_name: comfyui-cuda
     #     restart: "no"
     #     image: yanwk/comfyui-boot:cu124-slim

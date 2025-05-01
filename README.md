@@ -14,3 +14,10 @@
 
 # Where to find models:
 - https://huggingface.co/models
+
+
+# how to download a model (ollama)
+- `docker exec -it ollama bash`
+- Find a model, for example: https://huggingface.co/unsloth/QwQ-32B-GGUF?show_file_info=QwQ-32B-IQ4_XS.gguf
+- `ollama pull hf.co/unsloth/QwQ-32B-GGUF:IQ4_XS`
+- Once it's downloaded, you should be able to see/use it in openwebui

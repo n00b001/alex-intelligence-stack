@@ -1,9 +1,8 @@
 # name: ollama-web-ui
 services:
-    vllm:
-        profiles: ["vllm"]
+    llama-swap:
         ports:
-            - 8883:5000
+            - 9292:8080
         runtime: nvidia
         deploy:
             resources:
@@ -13,38 +12,69 @@ services:
                           count: all
                           capabilities:
                               - gpu
+        image: ghcr.io/mostlygeek/llama-swap:cuda
+        command: /app/llama-swap -config /app/config.yaml -watch-config
         volumes:
-            - ${HOST_CACHE_DIR}/ollama:/root/.ollama
-            - ${HOST_CACHE_DIR}/huggingface:/root/.cache/huggingface
-            - ${HOST_CACHE_DIR}/llms:/root/.cache/llms
-            - ${HOST_CACHE_DIR}/huggingface:/workspace/.cache/huggingface
-            - vllm-cache:/workspace/.cache
-        image: vllm/vllm-openai:latest
-        container_name: vllm    
+            #  keep python/hf-transfer installed
+            - llama-swap-usr:/usr
+            - /home/alex/.cache/models:/models
+            - /home/alex/.cache/models:/root/.cache/llama.cpp
+            - /home/alex/ollama-docker-stack/configs/llama-swap/config.yaml:/app/config.yaml
+        environment:
+            - HF_HUB_ENABLE_HF_TRANSFER=1
+        container_name: llama-swap
         restart: unless-stopped
         networks:
             - ollama-docker
-        entrypoint: python3
-        command: [
-            "-m", "vllm.entrypoints.openai.api_server",
-            "--port=5000","--host=0.0.0.0",
-            "--trust-remote-code",
-            "--enable-sleep-mode",
-            "--seed","0",
-
-            # not oom
-            "--model","Qwen/Qwen3-0.6B"
-        ] 
-        environment:
-            - VLLM_DO_NOT_TRACK=1
-            - VLLM_NO_USAGE_STATS=1
-            - HF_HUB_DOWNLOAD_TIMEOUT=300
-            - HF_HUB_ETAG_TIMEOUT=300
-            - HF_HUB_ENABLE_HF_TRANSFER=1
-            # - HF_HUB_ENABLE_HF_TRANSFER=0
-        ipc: host
         stdin_open: true
         tty: true
+        
+    # comment this out if you want to use vllm
+    # vllm:
+    #     profiles: ["vllm"]
+    #     ports:
+    #         - 8883:5000
+    #     runtime: nvidia
+    #     deploy:
+    #         resources:
+    #             reservations:
+    #                 devices:
+    #                     - driver: nvidia
+    #                       count: all
+    #                       capabilities:
+    #                           - gpu
+    #     volumes:
+    #         - ${HOST_CACHE_DIR}/ollama:/root/.ollama
+    #         - ${HOST_CACHE_DIR}/huggingface:/root/.cache/huggingface
+    #         - ${HOST_CACHE_DIR}/llms:/root/.cache/llms
+    #         - ${HOST_CACHE_DIR}/huggingface:/workspace/.cache/huggingface
+    #         - vllm-cache:/workspace/.cache
+    #     image: vllm/vllm-openai:latest
+    #     container_name: vllm    
+    #     restart: unless-stopped
+    #     networks:
+    #         - ollama-docker
+    #     entrypoint: python3
+    #     command: [
+    #         "-m", "vllm.entrypoints.openai.api_server",
+    #         "--port=5000","--host=0.0.0.0",
+    #         "--trust-remote-code",
+    #         "--enable-sleep-mode",
+    #         "--seed","0",
+
+    #         # not oom
+    #         "--model","Qwen/Qwen3-0.6B"
+    #     ] 
+    #     environment:
+    #         - VLLM_DO_NOT_TRACK=1
+    #         - VLLM_NO_USAGE_STATS=1
+    #         - HF_HUB_DOWNLOAD_TIMEOUT=300
+    #         - HF_HUB_ETAG_TIMEOUT=300
+    #         - HF_HUB_ENABLE_HF_TRANSFER=1
+    #         # - HF_HUB_ENABLE_HF_TRANSFER=0
+    #     ipc: host
+    #     stdin_open: true
+    #     tty: true
 
     infinity:
         ports:
@@ -252,49 +282,51 @@ services:
             - ollama-docker   
         stdin_open: true
         tty: true
-    ollama:
-        profiles: ["ollama"]
-        ports:
-            - 8002:11434
-        runtime: nvidia
-        deploy:
-            resources:
-                limits:
-                  cpus: '32'
-                  memory: 64G
-                reservations:
-                    devices:
-                        - driver: nvidia
-                          count: all
-                          capabilities:
-                              - gpu
-        volumes:
-            - ${HOST_HOME_DIR}/ollama-docker-stack/configs/ollama-custom-models:/custom-models
-            - ${HOST_CACHE_DIR}/ollama:/root/.ollama
-            - ${HOST_CACHE_DIR}/ollama:/usr/share/ollama/.ollama
-            - ${HOST_CACHE_DIR}/huggingface:/root/.cache/huggingface
-            - dot-cache:/root/.cache
-        environment:
-            - OLLAMA_CONTEXT_LENGTH=32768
-            - OLLAMA_ORIGINS=moz-extension://*
-            - OLLAMA_FLASH_ATTENTION=1
-            # q4 has bug: https://github.com/ollama/ollama/issues/7938
-            - OLLAMA_KV_CACHE_TYPE=q4_0
-            # - OLLAMA_KV_CACHE_TYPE=q6_0
-            # - OLLAMA_KV_CACHE_TYPE=q8_0
-            - OLLAMA_MAX_VRAM=25769803776
-            - OLLAMA_KEEP_ALIVE=300
-            - OLLAMA_LOAD_TIMEOUT=300
-            - GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
-            - OLLAMA_NUM_PARALLEL=1
-            - OLLAMA_MAX_QUEUE=128
-        container_name: ollama
-        restart: unless-stopped     
-        image: ollama/ollama:latest
-        networks:
-            - ollama-docker   
-        stdin_open: true
-        tty: true
+        
+    # I don't recommend ollama when llama-swap exists!
+    # ollama:
+    #     profiles: ["ollama"]
+    #     ports:
+    #         - 8002:11434
+    #     runtime: nvidia
+    #     deploy:
+    #         resources:
+    #             limits:
+    #               cpus: '32'
+    #               memory: 64G
+    #             reservations:
+    #                 devices:
+    #                     - driver: nvidia
+    #                       count: all
+    #                       capabilities:
+    #                           - gpu
+    #     volumes:
+    #         - ${HOST_HOME_DIR}/ollama-docker-stack/configs/ollama-custom-models:/custom-models
+    #         - ${HOST_CACHE_DIR}/ollama:/root/.ollama
+    #         - ${HOST_CACHE_DIR}/ollama:/usr/share/ollama/.ollama
+    #         - ${HOST_CACHE_DIR}/huggingface:/root/.cache/huggingface
+    #         - dot-cache:/root/.cache
+    #     environment:
+    #         - OLLAMA_CONTEXT_LENGTH=32768
+    #         - OLLAMA_ORIGINS=moz-extension://*
+    #         - OLLAMA_FLASH_ATTENTION=1
+    #         # q4 has bug: https://github.com/ollama/ollama/issues/7938
+    #         - OLLAMA_KV_CACHE_TYPE=q4_0
+    #         # - OLLAMA_KV_CACHE_TYPE=q6_0
+    #         # - OLLAMA_KV_CACHE_TYPE=q8_0
+    #         - OLLAMA_MAX_VRAM=25769803776
+    #         - OLLAMA_KEEP_ALIVE=300
+    #         - OLLAMA_LOAD_TIMEOUT=300
+    #         - GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
+    #         - OLLAMA_NUM_PARALLEL=1
+    #         - OLLAMA_MAX_QUEUE=128
+    #     container_name: ollama
+    #     restart: unless-stopped     
+    #     image: ollama/ollama:latest
+    #     networks:
+    #         - ollama-docker   
+    #     stdin_open: true
+    #     tty: true
     speaches:
         ports:
             - 8004:8000

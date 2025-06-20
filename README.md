@@ -79,7 +79,9 @@ A curated collection of videos, websites, software, example projects, cloud/host
 
 ### VRAM / RAM Estimation
 - https://apxml.com/tools/vram-calculator  
-- https://huggingface.co/spaces/NyxKrage/LLM-Model-VRAM-Calculator  
+- https://huggingface.co/spaces/NyxKrage/LLM-Model-VRAM-Calculator
+- https://bbycroft.net/llm
+- https://poloclub.github.io/transformer-explainer/
 
 ### Running Models Locally
 

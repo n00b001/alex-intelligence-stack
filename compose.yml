@@ -1,0 +1,450 @@
+# name: ollama-web-ui
+services:
+    llama-swap:
+        ports:
+            - 9292:8080
+        runtime: nvidia
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities:
+                              - gpu
+        image: ghcr.io/mostlygeek/llama-swap:cuda
+        command: /app/llama-swap -config /app/config.yaml -watch-config
+        volumes:
+            #  keep python/hf-transfer installed
+            - llama-swap-usr:/usr
+            - /home/alex/.cache/models:/models
+            - /home/alex/.cache/models:/root/.cache/llama.cpp
+            - /home/alex/ollama-docker-stack/configs/llama-swap/config.yaml:/app/config.yaml
+        environment:
+            - HF_HUB_ENABLE_HF_TRANSFER=1
+        container_name: llama-swap
+        restart: unless-stopped
+        networks:
+            - ollama-docker
+        stdin_open: true
+        tty: true
+        
+    # comment this out if you want to use vllm
+    # vllm:
+    #     profiles: ["vllm"]
+    #     ports:
+    #         - 8883:5000
+    #     runtime: nvidia
+    #     deploy:
+    #         resources:
+    #             reservations:
+    #                 devices:
+    #                     - driver: nvidia
+    #                       count: all
+    #                       capabilities:
+    #                           - gpu
+    #     volumes:
+    #         - ${HOST_CACHE_DIR}/ollama:/root/.ollama
+    #         - ${HOST_CACHE_DIR}/huggingface:/root/.cache/huggingface
+    #         - ${HOST_CACHE_DIR}/llms:/root/.cache/llms
+    #         - ${HOST_CACHE_DIR}/huggingface:/workspace/.cache/huggingface
+    #         - vllm-cache:/workspace/.cache
+    #     image: vllm/vllm-openai:latest
+    #     container_name: vllm    
+    #     restart: unless-stopped
+    #     networks:
+    #         - ollama-docker
+    #     entrypoint: python3
+    #     command: [
+    #         "-m", "vllm.entrypoints.openai.api_server",
+    #         "--port=5000","--host=0.0.0.0",
+    #         "--trust-remote-code",
+    #         "--enable-sleep-mode",
+    #         "--seed","0",
+
+    #         # not oom
+    #         "--model","Qwen/Qwen3-0.6B"
+    #     ] 
+    #     environment:
+    #         - VLLM_DO_NOT_TRACK=1
+    #         - VLLM_NO_USAGE_STATS=1
+    #         - HF_HUB_DOWNLOAD_TIMEOUT=300
+    #         - HF_HUB_ETAG_TIMEOUT=300
+    #         - HF_HUB_ENABLE_HF_TRANSFER=1
+    #         # - HF_HUB_ENABLE_HF_TRANSFER=0
+    #     ipc: host
+    #     stdin_open: true
+    #     tty: true
+
+    infinity:
+        ports:
+            - 8881:8881
+        runtime: nvidia
+        deploy:
+            resources:
+                limits:
+                  cpus: 32
+                  memory: 2g
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities:
+                              - gpu
+        volumes:
+            - ${HOST_CACHE_DIR}/huggingface:/app/.cache/huggingface
+            - infinity-cache:/app/.cache
+        environment:
+            - DO_NOT_TRACK=1
+            - INFINITY_ANONYMOUS_USAGE_STATS=0
+            - INFINITY_MODEL_ID=dunzhang/stella_en_400M_v5
+            - INFINITY_REVISION=refs/pr/24
+            # - INFINITY_MODEL_ID=KeyurRamoliya/multilingual-e5-large-instruct-GGUF
+            # - INFINITY_REVISION=main
+            - INFINITY_DTYPE=bfloat16
+            - INFINITY_BATCH_SIZE=16
+            - INFINITY_DEVICE=cuda
+            - INFINITY_ENGINE=torch
+            - INFINITY_PORT=8881
+            - INFINITY_MODEL_WARMUP=true
+            - INFINITY_VECTOR_DISK_CACHE=true
+            - INFINITY_COMPILE=true
+            - INFINITY_BETTERTRANSFORMER=true
+            - INFINITY_TRUST_REMOTE_CODE=true
+            - INFINITY_API_KEY=asdf
+        image: michaelf34/infinity:latest-trt-onnx
+        container_name: infinity
+        restart: unless-stopped
+        networks:
+            - ollama-docker    
+        command: v2
+        stdin_open: true
+        tty: true
+
+    netdata:
+        ports:
+          - 8882:19999
+        runtime: nvidia
+        deploy:
+            resources:
+                limits:
+                  cpus: 1
+                  memory: 300m
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities:
+                              - gpu
+        volumes:
+          - ${HOST_HOME_DIR}/ollama-docker-stack/configs/netdata/netdata/config:/etc/netdata
+          - netdatalib:/var/lib/netdata
+          - netdatacache:/var/cache/netdata
+          - /:/host/root:ro,rslave
+          - /etc/passwd:/host/etc/passwd:ro
+          - /etc/group:/host/etc/group:ro
+          - /etc/localtime:/etc/localtime:ro
+          - /proc:/host/proc:ro
+          - /sys:/host/sys:ro
+          - /etc/os-release:/host/etc/os-release:ro
+          - /var/log:/host/var/log:ro
+          - /var/run/docker.sock:/var/run/docker.sock:ro
+          - /run/dbus:/run/dbus:ro          
+        image: netdata/netdata:stable
+        container_name: netdata
+        restart: unless-stopped
+        networks:
+            - ollama-docker    
+        cap_add:
+          - SYS_PTRACE
+          - SYS_ADMIN
+        pid: host
+        security_opt:
+          - apparmor:unconfined
+        stdin_open: true
+        tty: true           
+
+    watchtower:
+        deploy:
+            resources:
+                limits:
+                  cpus: '1'
+                  memory: 50m
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock   
+        image: containrrr/watchtower:latest
+        container_name: watchtower
+        restart: unless-stopped
+        networks:
+            - ollama-docker    
+        command: --interval 300
+        stdin_open: true
+        tty: true
+
+    jupyter-cuda:
+        ports:
+            - 8888:8888
+        runtime: nvidia
+        deploy:
+            resources:
+                limits:
+                  cpus: '2'
+                  memory: 2G
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities:
+                              - gpu
+        volumes:
+          - jupyter-data:/home/jovyan/work 
+        environment:
+          - GRANT_SUDO=yes
+          - JUPYTER_ENABLE_LAB=yes
+          - JUPYTER_TOKEN=fa8a78754e9bad79cc5939d359d12ff0b9d41ccb6ee34c68
+        image: cschranz/gpu-jupyter:v1.9_cuda-12.6_ubuntu-24.04
+        container_name: jupyter-cuda
+        restart: unless-stopped
+        networks:
+            - ollama-docker    
+        user: root
+        stdin_open: true
+        tty: true
+
+    openhands:
+        ports:
+            - 8887:3000
+        extra_hosts:
+            - host.docker.internal:host-gateway
+        runtime: nvidia
+        deploy:
+            resources:
+                limits:
+                  cpus: '4'
+                  memory: 4G
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities:
+                              - gpu
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - openhands-state:/.openhands-state
+            - workspace:/workspace
+            - file_store:/file_store
+            - ${HOST_HOME_DIR}/ollama-docker-stack/configs/openhands/config.toml:/app/openhands/config.toml
+            - ${HOST_HOME_DIR}/ollama-docker-stack/configs/openhands/config.toml:/app/openhands/core/config.toml
+            - ${HOST_HOME_DIR}/ollama-docker-stack/configs/openhands/config.toml:/app/openhands/core/config/config.toml
+        environment:UF:Q6_K_L
+            - SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:latest-nikolaik
+            - LOG_ALL_EVENTS=true
+            - WORKSPACE_BASE=/workspace
+            - LLM_API_KEY=asdf
+            - LLM_BASE_URL=http://ollama:11434/v1
+            - LLM_EMBEDDING_BASE_URL=http://infinity:8881
+            - LLM_EMBEDDING_MODEL=dunzhang/stella_en_400M_v5
+            - LLM_MODEL=openai/hf.co/arcee-ai/Arcee-Blitz-GGUF:Q6_K_L
+            - LLM_CACHING_PROMPT=true
+            - AGENT_MEMORY_ENABLED=true
+            - REASONING_EFFORT=high
+            - MAX_ITERATIONS=100
+            - LLM_TEMPERATURE=0
+            - AGENT_MEMORY_MAX_THREADS=32
+            - AGENT_ENABLE_AUTO_LINT=true
+            - LLM_OLLAMA_BASE_URL=http://ollama:11434
+        image: docker.all-hands.dev/all-hands-ai/openhands:latest
+        container_name: openhands-app
+        restart: unless-stopped
+        networks:
+            - ollama-docker   
+        stdin_open: true
+        tty: true
+    tika:
+        ports:
+          - 9998:9998
+        runtime: nvidia
+        deploy:
+            resources:
+                limits:
+                  cpus: '1'
+                  memory: 300m
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities:
+                              - gpu
+        image: apache/tika:latest-full
+        container_name: tika
+        restart: unless-stopped
+        networks:
+            - ollama-docker   
+        stdin_open: true
+        tty: true
+        
+    # I don't recommend ollama when llama-swap exists!
+    # ollama:
+    #     profiles: ["ollama"]
+    #     ports:
+    #         - 8002:11434
+    #     runtime: nvidia
+    #     deploy:
+    #         resources:
+    #             limits:
+    #               cpus: '32'
+    #               memory: 64G
+    #             reservations:
+    #                 devices:
+    #                     - driver: nvidia
+    #                       count: all
+    #                       capabilities:
+    #                           - gpu
+    #     volumes:
+    #         - ${HOST_HOME_DIR}/ollama-docker-stack/configs/ollama-custom-models:/custom-models
+    #         - ${HOST_CACHE_DIR}/ollama:/root/.ollama
+    #         - ${HOST_CACHE_DIR}/ollama:/usr/share/ollama/.ollama
+    #         - ${HOST_CACHE_DIR}/huggingface:/root/.cache/huggingface
+    #         - dot-cache:/root/.cache
+    #     environment:
+    #         - OLLAMA_CONTEXT_LENGTH=32768
+    #         - OLLAMA_ORIGINS=moz-extension://*
+    #         - OLLAMA_FLASH_ATTENTION=1
+    #         # q4 has bug: https://github.com/ollama/ollama/issues/7938
+    #         - OLLAMA_KV_CACHE_TYPE=q4_0
+    #         # - OLLAMA_KV_CACHE_TYPE=q6_0
+    #         # - OLLAMA_KV_CACHE_TYPE=q8_0
+    #         - OLLAMA_MAX_VRAM=25769803776
+    #         - OLLAMA_KEEP_ALIVE=300
+    #         - OLLAMA_LOAD_TIMEOUT=300
+    #         - GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
+    #         - OLLAMA_NUM_PARALLEL=1
+    #         - OLLAMA_MAX_QUEUE=128
+    #     container_name: ollama
+    #     restart: unless-stopped     
+    #     image: ollama/ollama:latest
+    #     networks:
+    #         - ollama-docker   
+    #     stdin_open: true
+    #     tty: true
+    speaches:
+        ports:
+            - 8004:8000
+        runtime: nvidia
+        deploy:
+            resources:
+                limits:
+                  cpus: '2'
+                  memory: 2G
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities:
+                              - gpu
+        volumes:
+            - ${HOST_CACHE_DIR}/huggingface:/home/ubuntu/.cache/huggingface
+            - dot-cache:/home/ubuntu/.cache
+        environment:
+            - WHISPER__MODEL=deepdml/faster-whisper-large-v3-turbo-ct2
+            - ENABLE_UI=False
+            - USE_BATCHED_MODE=True
+            - LOG_LEVEL=INFO
+            - CHAT_COMPLETION_BASE_URL=http://ollama:11434
+        container_name: speaches
+        restart: unless-stopped            
+        image: ghcr.io/speaches-ai/speaches:latest-cuda
+        networks:
+          - ollama-docker      
+        stdin_open: true
+        tty: true
+    searxng:
+        ports:
+            - 8080:8080
+        deploy:
+            resources:
+                limits:
+                  cpus: '2'
+                  memory: 1g
+        volumes:
+            - ${HOST_HOME_DIR}/ollama-docker-stack/configs/searxng:/etc/searxng:rw
+        environment:
+            - SEARXNG_PORT=8080
+            - SEARXNG_BIND_ADDRESS=0.0.0.0
+            - SEARXNG_HOSTNAME=searxng:8080
+            - SEARXNG_BASE_URL=https://${SEARXNG_HOSTNAME:-localhost}/
+            - UWSGI_WORKERS=2
+            - UWSGI_THREADS=10
+        container_name: searxng
+        restart: unless-stopped
+        image: docker.io/searxng/searxng:latest
+        networks:
+            - ollama-docker
+        stdin_open: true
+        tty: true
+        cap_add:
+            - CHOWN
+            - SETGID
+            - SETUID
+            - DAC_OVERRIDE
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "1m"
+                max-file: "1"
+
+    open-webui:
+        ports:
+            - 8005:8080
+        runtime: nvidia
+        deploy:
+            resources:
+                limits:
+                  cpus: '4'
+                  memory: 2G
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities:
+                              - gpu
+        volumes:
+            - ${HOST_CACHE_DIR}/huggingface:/root/.cache/huggingface
+            - dot-cache:/root/.cache
+            - webui-code:/app/backend/data
+        environment:
+            - ENABLE_IMAGE_GENERATION=true
+            - COMFYUI_BASE_URL=http://localhost:8005
+            - ENABLE_GOOGLE_DRIVE_INTEGRATION=True
+            - ENABLE_RAG_WEB_SEARCH=true
+            - RAG_WEB_SEARCH_ENGINE=searxng
+            - RAG_WEB_SEARCH_RESULT_COUNT=3
+            - RAG_WEB_SEARCH_CONCURRENT_REQUESTS=10
+            - SEARXNG_QUERY_URL=http://searxng:8080/search?q=<query>
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3         
+        container_name: open-webui
+        restart: unless-stopped
+        image: ghcr.io/open-webui/open-webui:cuda
+        networks:
+            - ollama-docker
+        stdin_open: true
+        tty: true
+
+networks:
+    ollama-docker:
+
+volumes:
+    dot-cache:
+    webui-code:
+    openhands-state:
+    workspace:
+    file_store:
+    jupyter-data:
+    infinity-cache:
+    netdatalib:
+    netdatacache:        
+    vllm-cache:        

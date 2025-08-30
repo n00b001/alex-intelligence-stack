@@ -1,153 +1,152 @@
-# name: ollama-web-ui
 services:
-    vllm:
-        ports:
-            - 8883:5000
-        runtime: nvidia
-        deploy:
-            resources:
-                reservations:
-                    devices:
-                        - driver: nvidia
-                          count: all
-                          capabilities:
-                              - gpu
-        volumes:
-            - /home/alex/.cache/ollama:/root/.ollama
-            - /home/alex/.cache/huggingface:/root/.cache/huggingface
-            - /home/alex/.cache/llms:/root/.cache/llms
-            - /home/alex/.cache/huggingface:/workspace/.cache/huggingface
-            - vllm-cache:/workspace/.cache
-        image: vllm/vllm-openai:latest
-        container_name: vllm    
-        restart: unless-stopped
-        networks:
-            - ollama-docker
-        entrypoint: python3
-        # https://docs.vllm.ai/en/latest/serving/engine_args.html#engine-args
-        # command: /bin/bash
-        command: [
-            "-m", "vllm.entrypoints.openai.api_server",
-            "--port=5000","--host=0.0.0.0",
-            "--trust-remote-code",
-            "--enable-sleep-mode",
-            "--seed","0",
-            # "--api-key","token-abc123",
-            # "--model","Qwen/Qwen2.5-Coder-14B-Instruct-AWQ",
-            # "--model","/root/.cache/llms/t2t/QwQ-32B.Q8_0.gguf.gguf",
-            # "--model","/root/.ollama/models/blobs/sha256-1e8b6e0cc0ca29859e57ab9562237f00a234a464fa472d9c3202db7d97b27855",
-            # "--tokenizer","Qwen/QwQ-32B",
-            # "--hf-config-path","Qwen/QwQ-32B",
-            # "--model","Qwen/Qwen3-0.6B-FP8",
+    # vllm:
+    #     ports:
+    #         - 8883:5000
+    #     runtime: nvidia
+    #     deploy:
+    #         resources:
+    #             reservations:
+    #                 devices:
+    #                     - driver: nvidia
+    #                       count: all
+    #                       capabilities:
+    #                           - gpu
+    #     volumes:
+    #         - /home/alex/.cache/ollama:/root/.ollama
+    #         - /home/alex/.cache/huggingface:/root/.cache/huggingface
+    #         - /home/alex/.cache/llms:/root/.cache/llms
+    #         - /home/alex/.cache/huggingface:/workspace/.cache/huggingface
+    #         - vllm-cache:/workspace/.cache
+    #     image: vllm/vllm-openai:latest
+    #     container_name: vllm
+    #     restart: unless-stopped
+    #     networks:
+    #         - ollama-docker
+    #     entrypoint: python3
+    #     # https://docs.vllm.ai/en/latest/serving/engine_args.html#engine-args
+    #     # command: /bin/bash
+    #     command: [
+    #         "-m", "vllm.entrypoints.openai.api_server",
+    #         "--port=5000","--host=0.0.0.0",
+    #         "--trust-remote-code",
+    #         "--enable-sleep-mode",
+    #         "--seed","0",
+    #         # "--api-key","token-abc123",
+    #         # "--model","Qwen/Qwen2.5-Coder-14B-Instruct-AWQ",
+    #         # "--model","/root/.cache/llms/t2t/QwQ-32B.Q8_0.gguf.gguf",
+    #         # "--model","/root/.ollama/models/blobs/sha256-1e8b6e0cc0ca29859e57ab9562237f00a234a464fa472d9c3202db7d97b27855",
+    #         # "--tokenizer","Qwen/QwQ-32B",
+    #         # "--hf-config-path","Qwen/QwQ-32B",
+    #         # "--model","Qwen/Qwen3-0.6B-FP8",
 
-            # not oom
-            # "--model","Qwen/Qwen3-0.6B",
+    #         # not oom
+    #         # "--model","Qwen/Qwen3-0.6B",
 
-            # oom
-            # "--model","Qwen/Qwen3-30B-A3B",
-            # "--model","Qwen/Qwen3-30B-A3B-FP8",
-            # "--model","Qwen/Qwen3-32B",
-            # "--model","Qwen/Qwen3-32B-FP8",
-            # "--tokenizer","Qwen/QwQ-32B",
-            # "--hf-config-path","Qwen/QwQ-32B",
-            # "--model","Orion-zhen/Qwen3-32B-AWQ",
-            # "-q","awq",
-            # "--model","Qwen/Qwen3-14B",
-            "--model","Qwen/Qwen3-8B-FP8",
-            # "--model","Qwen3/Qwen3-8B-AWQ",
-            "--max-model-len","32768",
-            "--enable-reasoning", "--reasoning-parser","deepseek_r1",
-            # "--rope-scaling",'{"rope_type":"yarn","factor":4.0,"original_max_position_embeddings":32768}'
-            # "--model","/root/.ollama/models/blobs/sha256-1e8b6e0cc0ca29859e57ab9562237f00a234a464fa472d9c3202db7d97b27855",
-            # "--tokenizer","Qwen/Qwen3-30B-A3B",
-            # "--hf-config-path","Qwen/Qwen3-30B-A3B",
-            # "--model","unsloth/QwQ-32B-GGUF",
-            # "--model","ModelCloud/QwQ-32B-gptqmodel-4bit-vortex-v1",
-            # "--model","Qwen/QwQ-32B-AWQ",
-            # "--model","Qwen/Qwen2.5-Coder-32B-Instruct-GPTQ-Int4",
-            # "--model","Qwen/Qwen2.5-Coder-32B-Instruct-AWQ",
-            # "--model","Vezora/Qwen2.5-Coder-32B-Instruct-fp8-W8A16",
-            # "--dtype","auto",
-            # "--dtype","half",
-            # "--quantization","awq",
-            # "--quantization","awq_marlin",
-            # "--quantization","compressed-tensors",
-            # "--calculate-kv-scales",
+    #         # oom
+    #         # "--model","Qwen/Qwen3-30B-A3B",
+    #         # "--model","Qwen/Qwen3-30B-A3B-FP8",
+    #         # "--model","Qwen/Qwen3-32B",
+    #         # "--model","Qwen/Qwen3-32B-FP8",
+    #         # "--tokenizer","Qwen/QwQ-32B",
+    #         # "--hf-config-path","Qwen/QwQ-32B",
+    #         # "--model","Orion-zhen/Qwen3-32B-AWQ",
+    #         # "-q","awq",
+    #         # "--model","Qwen/Qwen3-14B",
+    #         "--model","Qwen/Qwen3-14B-FP8",
+    #         # "--model","Qwen3/Qwen3-8B-AWQ",
+    #         "--max-model-len","32768",
+    #         "--enable-reasoning", "--reasoning-parser","deepseek_r1",
+    #         # "--rope-scaling",'{"rope_type":"yarn","factor":4.0,"original_max_position_embeddings":32768}'
+    #         # "--model","/root/.ollama/models/blobs/sha256-1e8b6e0cc0ca29859e57ab9562237f00a234a464fa472d9c3202db7d97b27855",
+    #         # "--tokenizer","Qwen/Qwen3-30B-A3B",
+    #         # "--hf-config-path","Qwen/Qwen3-30B-A3B",
+    #         # "--model","unsloth/QwQ-32B-GGUF",
+    #         # "--model","ModelCloud/QwQ-32B-gptqmodel-4bit-vortex-v1",
+    #         # "--model","Qwen/QwQ-32B-AWQ",
+    #         # "--model","Qwen/Qwen2.5-Coder-32B-Instruct-GPTQ-Int4",
+    #         # "--model","Qwen/Qwen2.5-Coder-32B-Instruct-AWQ",
+    #         # "--model","Vezora/Qwen2.5-Coder-32B-Instruct-fp8-W8A16",
+    #         # "--dtype","auto",
+    #         # "--dtype","half",
+    #         # "--quantization","awq",
+    #         # "--quantization","awq_marlin",
+    #         # "--quantization","compressed-tensors",
+    #         # "--calculate-kv-scales",
 
-            # performance improvments
-            # claude sonet 3.7
-            # "--max-num-batched-tokens","8192",
-            # "--block-size","16",
-            # "--swap-space","16",
-            # "--numa-aware",
-            # "--disable-log-stats",
+    #         # performance improvments
+    #         # claude sonet 3.7
+    #         # "--max-num-batched-tokens","8192",
+    #         # "--block-size","16",
+    #         # "--swap-space","16",
+    #         # "--numa-aware",
+    #         # "--disable-log-stats",
 
-            # openai o4-mini
-            # "--num-cpu-workers","6",
-            # "--num-gpu-per-worker","1",
-            # "--max-batch-size","16",
-            # "--batch-timeout","0",
-            # "--enable-chunked-prefill",
-            # "--chunked-prefill-timing-warmup","10ms",
-            "--tensor-parallel-size","1",
-            "--pipeline-parallel-size","1",
+    #         # openai o4-mini
+    #         # "--num-cpu-workers","6",
+    #         # "--num-gpu-per-worker","1",
+    #         # "--max-batch-size","16",
+    #         # "--batch-timeout","0",
+    #         # "--enable-chunked-prefill",
+    #         # "--chunked-prefill-timing-warmup","10ms",
+    #         "--tensor-parallel-size","1",
+    #         "--pipeline-parallel-size","1",
 
-            # deepdeek-r1
-            # "--quantization","awq",
-            # "--dtype","float16",
-            "--gpu-memory-utilization","0.95",
-            # "--max-num-seqs","256",
-            # "--enable-prefix-caching",
+    #         # deepdeek-r1
+    #         # "--quantization","awq",
+    #         # "--dtype","float16",
+    #         "--gpu-memory-utilization","0.95",
+    #         # "--max-num-seqs","256",
+    #         # "--enable-prefix-caching",
 
-            # "--tensor-parallel-size","2",
+    #         # "--tensor-parallel-size","2",
 
-            # if OOM
-            # "--kv-cache-dtype","fp8",
-            # "--max-model-len","2048",
-            # "--tensor-parallel-size","1",
-            # "--max-num-batched-tokens","1",
-            # "--max-num-seqs","1",
-            # "--gpu-memory-utilization","0.99",
+    #         # if OOM
+    #         # "--kv-cache-dtype","fp8",
+    #         # "--max-model-len","2048",
+    #         # "--tensor-parallel-size","1",
+    #         # "--max-num-batched-tokens","1",
+    #         # "--max-num-seqs","1",
+    #         # "--gpu-memory-utilization","0.99",
 
-            # If really OOM:
-            # "--enforce-eager",
-            # "--enable-chunked-prefill",
-            "--cpu-offload-gb","50",
-            # "--load-format","fastsafetensors",
+    #         # If really OOM:
+    #         # "--enforce-eager",
+    #         # "--enable-chunked-prefill",
+    #         "--cpu-offload-gb","50",
+    #         # "--load-format","fastsafetensors",
 
-            # "--speculative-config",'{"model": "Qwen/Qwen3-0.6B-FP8", "num_speculative_tokens": 5, "prompt_lookup_max": 4, "method": "ngram"}',
-        ] 
-        environment:
-            # - VLLM_USE_MODELSCOPE=true
-            # openai o4-mini
-            # - OMP_NUM_THREADS=4                     # keep CPU threads in check
-            # - MKL_NUM_THREADS=4                     # avoid MKL hyperscaling
-            # - NCCL_DEBUG=INFO                        # diagnose any slowdowns
-            # - CUDA_LAUNCH_BLOCKING=0                # asynchronous launches
-            # - TF_CPP_MIN_LOG_LEVEL=2                # suppress verbose logs
+    #         # "--speculative-config",'{"model": "Qwen/Qwen3-0.6B-FP8", "num_speculative_tokens": 5, "prompt_lookup_max": 4, "method": "ngram"}',
+    #     ]
+    #     environment:
+    #         # - VLLM_USE_MODELSCOPE=true
+    #         # openai o4-mini
+    #         # - OMP_NUM_THREADS=4                     # keep CPU threads in check
+    #         # - MKL_NUM_THREADS=4                     # avoid MKL hyperscaling
+    #         # - NCCL_DEBUG=INFO                        # diagnose any slowdowns
+    #         # - CUDA_LAUNCH_BLOCKING=0                # asynchronous launches
+    #         # - TF_CPP_MIN_LOG_LEVEL=2                # suppress verbose logs
 
-            # deepseek-r1
-            # - VLLM_INSTALL_FLASH_ATTN=1
-            # - NCCL_IGNORE_DISABLED_P2P=1
-            # - USE_FASTSAFETENSOR=true
+    #         # deepseek-r1
+    #         # - VLLM_INSTALL_FLASH_ATTN=1
+    #         # - NCCL_IGNORE_DISABLED_P2P=1
+    #         # - USE_FASTSAFETENSOR=true
 
-            - VLLM_DO_NOT_TRACK=1
-            - VLLM_NO_USAGE_STATS=1
-            # - VLLM_ATTENTION_BACKEND=FLASHINFER
-            # - VLLM_ATTENTION_BACKEND=FLASH_ATTN
-            - HF_HUB_DOWNLOAD_TIMEOUT=300
-            - HF_HUB_ETAG_TIMEOUT=300
-            - HF_HUB_ENABLE_HF_TRANSFER=1
-            # - HF_HUB_ENABLE_HF_TRANSFER=0
-        ipc: host
-        # shm_size: '64gb'
-        # healthcheck:
-        #     test: [ "CMD", "curl", "-f", "http://0.0.0.0:5000/v1/models" ]
-        #     interval: 30s
-        #     timeout: 5s
-        #     retries: 20
-        stdin_open: true
-        tty: true
+    #         - VLLM_DO_NOT_TRACK=1
+    #         - VLLM_NO_USAGE_STATS=1
+    #         # - VLLM_ATTENTION_BACKEND=FLASHINFER
+    #         # - VLLM_ATTENTION_BACKEND=FLASH_ATTN
+    #         - HF_HUB_DOWNLOAD_TIMEOUT=300
+    #         - HF_HUB_ETAG_TIMEOUT=300
+    #         - HF_HUB_ENABLE_HF_TRANSFER=1
+    #         # - HF_HUB_ENABLE_HF_TRANSFER=0
+    #     ipc: host
+    #     # shm_size: '64gb'
+    #     # healthcheck:
+    #     #     test: [ "CMD", "curl", "-f", "http://0.0.0.0:5000/v1/models" ]
+    #     #     interval: 30s
+    #     #     timeout: 5s
+    #     #     retries: 20
+    #     stdin_open: true
+    #     tty: true
 
     infinity:
         ports:
@@ -170,18 +169,25 @@ services:
         environment:
             - DO_NOT_TRACK=1
             - INFINITY_ANONYMOUS_USAGE_STATS=0
-            - INFINITY_MODEL_ID=dunzhang/stella_en_400M_v5
-            - INFINITY_REVISION=refs/pr/24
+            # - INFINITY_MODEL_ID=jinaai/jina-clip-v2 # slow because no xformers
+            # - INFINITY_MODEL_ID=jinaai/jina-clip-v1
+            - INFINITY_MODEL_ID=openai/clip-vit-base-patch32;laion/larger_clap_general
+            # - INFINITY_MODEL_ID=wkcn/TinyCLIP-ViT-8M-16-Text-3M-YFCC15M;jinaai/jina-clip-v1;jinaai/jina-clip-v2
+            # - INFINITY_MODEL_ID=nielsr/imagebind-huge # not supported
+            # - INFINITY_MODEL_ID=dunzhang/stella_en_400M_v5
+            # - INFINITY_REVISION=refs/pr/24
             # - INFINITY_MODEL_ID=KeyurRamoliya/multilingual-e5-large-instruct-GGUF
             # - INFINITY_REVISION=main
-            - INFINITY_DTYPE=bfloat16
-            - INFINITY_BATCH_SIZE=16
-            - INFINITY_DEVICE=cuda
+            # - INFINITY_DTYPE=bfloat16
+            # - INFINITY_BATCH_SIZE=16
             - INFINITY_ENGINE=torch
+            - INFINITY_DEVICE=cuda
+            # - INFINITY_ENGINE=optimum
+            # - INFINITY_DEVICE=tensorrt
             - INFINITY_PORT=8881
             - INFINITY_MODEL_WARMUP=true
             - INFINITY_VECTOR_DISK_CACHE=true
-            - INFINITY_COMPILE=true
+            - INFINITY_COMPILE=fale
             - INFINITY_BETTERTRANSFORMER=true
             - INFINITY_TRUST_REMOTE_CODE=true
             - INFINITY_API_KEY=asdf
@@ -189,7 +195,7 @@ services:
         container_name: infinity
         restart: unless-stopped
         networks:
-            - ollama-docker    
+            - ollama-docker
         # command: v2 --engine optimum --device cuda --model-id  --port 8881
         # command: v2 --model-id dunzhang/stella_en_400M_v5 --revision "refs/pr/24" --dtype bfloat16 --batch-size 16 --device cuda --engine torch --port 8881 --no-bettertransformer
         command: v2
@@ -225,12 +231,12 @@ services:
           - /etc/os-release:/host/etc/os-release:ro
           - /var/log:/host/var/log:ro
           - /var/run/docker.sock:/var/run/docker.sock:ro
-          - /run/dbus:/run/dbus:ro          
+          - /run/dbus:/run/dbus:ro
         image: netdata/netdata:stable
         container_name: netdata
         restart: unless-stopped
         networks:
-            - ollama-docker    
+            - ollama-docker
         cap_add:
           - SYS_PTRACE
           - SYS_ADMIN
@@ -238,7 +244,7 @@ services:
         security_opt:
           - apparmor:unconfined
         stdin_open: true
-        tty: true           
+        tty: true
 
     watchtower:
         deploy:
@@ -247,12 +253,12 @@ services:
                   cpus: '1'
                   memory: 50m
         volumes:
-          - /var/run/docker.sock:/var/run/docker.sock   
+          - /var/run/docker.sock:/var/run/docker.sock
         image: containrrr/watchtower:latest
         container_name: watchtower
         restart: unless-stopped
         networks:
-            - ollama-docker    
+            - ollama-docker
         command: --interval 300
         stdin_open: true
         tty: true
@@ -273,7 +279,7 @@ services:
                           capabilities:
                               - gpu
         volumes:
-          - jupyter-data:/home/jovyan/work 
+          - jupyter-data:/home/jovyan/work
         environment:
           - GRANT_SUDO=yes
           - JUPYTER_ENABLE_LAB=yes
@@ -284,7 +290,7 @@ services:
         container_name: jupyter-cuda
         restart: unless-stopped
         networks:
-            - ollama-docker    
+            - ollama-docker
         user: root
         stdin_open: true
         tty: true
@@ -327,18 +333,20 @@ services:
             - LOG_ALL_EVENTS=true
             - WORKSPACE_BASE=/workspace
             - LLM_API_KEY=asdf
-            - LLM_BASE_URL=http://ollama:11434/v1
+            #- LLM_BASE_URL=http://ollama:11434/v1
+            - LLM_BASE_URL=http://llama-swap:8080/v1/
             - LLM_EMBEDDING_BASE_URL=http://infinity:8881
             - LLM_EMBEDDING_MODEL=dunzhang/stella_en_400M_v5
-            - LLM_MODEL=openai/hf.co/arcee-ai/Arcee-Blitz-GGUF:Q6_K_L
+            #- LLM_MODEL=openai/hf.co/arcee-ai/Arcee-Blitz-GGUF:Q6_K_L
+            - LLM_MODEL=openai/devstral-q4-q4-q4-128k
             - LLM_CACHING_PROMPT=true
             - AGENT_MEMORY_ENABLED=true
             - REASONING_EFFORT=high
-            - MAX_ITERATIONS=100
-            - LLM_TEMPERATURE=0
+            - MAX_ITERATIONS=1000
+            - LLM_TEMPERATURE=0.15
             - AGENT_MEMORY_MAX_THREADS=32
             - AGENT_ENABLE_AUTO_LINT=true
-            - LLM_OLLAMA_BASE_URL=http://ollama:11434
+            #- LLM_OLLAMA_BASE_URL=http://ollama:11434
         # depends_on:
         #     # - ollama
         #     - infinity
@@ -346,7 +354,7 @@ services:
         container_name: openhands-app
         restart: unless-stopped
         networks:
-            - ollama-docker   
+            - ollama-docker
         stdin_open: true
         tty: true
     tika:
@@ -368,59 +376,87 @@ services:
         container_name: tika
         restart: unless-stopped
         networks:
-            - ollama-docker   
+            - ollama-docker
         stdin_open: true
         tty: true
-    ollama:
+    llama-swap:
         ports:
-            - 8002:11434
+            - 9292:8080
         runtime: nvidia
         deploy:
             resources:
-                limits:
-                  cpus: '32'
-                  memory: 64G
                 reservations:
                     devices:
                         - driver: nvidia
                           count: all
                           capabilities:
                               - gpu
+        image: ghcr.io/mostlygeek/llama-swap:cuda
+        command: /app/llama-swap -config /app/config.yaml -watch-config
         volumes:
-            - /home/alex/ollama-docker-stack/configs/ollama-custom-models:/custom-models
-            - /home/alex/.cache/ollama:/root/.ollama
-            - /home/alex/.cache/ollama:/usr/share/ollama/.ollama
-            - /home/alex/.cache/huggingface:/root/.cache/huggingface
-            - dot-cache:/root/.cache
+            #  keep python/hf-transfer installed
+            - llama-swap-usr:/usr
+            - /home/alex/.cache/models:/models
+            - /home/alex/.cache/models:/root/.cache/llama.cpp
+            - /home/alex/ollama-docker-stack/configs/llama-swap/config.yaml:/app/config.yaml
         environment:
-            - OLLAMA_CONTEXT_LENGTH=32768
-            - OLLAMA_ORIGINS=moz-extension://*
-            - OLLAMA_FLASH_ATTENTION=1
-            # q4 has bug: https://github.com/ollama/ollama/issues/7938
-            - OLLAMA_KV_CACHE_TYPE=q4_0
-            # - OLLAMA_KV_CACHE_TYPE=q6_0
-            # - OLLAMA_KV_CACHE_TYPE=q8_0
-            - OLLAMA_MAX_VRAM=25769803776
-            - OLLAMA_KEEP_ALIVE=300
-            - OLLAMA_LOAD_TIMEOUT=300
-            - GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
-            - OLLAMA_NUM_PARALLEL=1
-            - OLLAMA_MAX_QUEUE=128
-            # - OLLAMA_MAX_VRAM=25769803776
-            # - "OLLAMA_KV_CACHE_TYPE=q8_0
-            # - "OLLAMA_MAX_VRAM=23192823398
-            # 24 GB in bytes 24*(1024^3)
-            # - "OLLAMA_MAX_LOADED_MODELS=3" 
-            # - "OLLAMA_GPU_OVERHEAD=536870912
-            # 12 GB in bytes
-            # - "OLLAMA_MAX_VRAM=12884901888
-        container_name: ollama
-        restart: unless-stopped     
-        image: ollama/ollama:latest
+            - HF_HUB_ENABLE_HF_TRANSFER=1
+        container_name: llama-swap
+        restart: unless-stopped
         networks:
-            - ollama-docker   
+            - ollama-docker
         stdin_open: true
         tty: true
+    # ollama:
+    #     ports:
+    #         - 8002:11434
+    #     runtime: nvidia
+    #     deploy:
+    #         resources:
+    #             limits:
+    #               cpus: '32'
+    #               memory: 64G
+    #             reservations:
+    #                 devices:
+    #                     - driver: nvidia
+    #                       count: all
+    #                       capabilities:
+    #                           - gpu
+    #     volumes:
+    #         - /home/alex/ollama-docker-stack/configs/ollama-custom-models:/custom-models
+    #         - /home/alex/.cache/ollama:/root/.ollama
+    #         - /home/alex/.cache/ollama:/usr/share/ollama/.ollama
+    #         - /home/alex/.cache/huggingface:/root/.cache/huggingface
+    #         - dot-cache:/root/.cache
+    #     environment:
+    #         - OLLAMA_CONTEXT_LENGTH=32768
+    #         - OLLAMA_ORIGINS=moz-extension://*
+    #         - OLLAMA_FLASH_ATTENTION=1
+    #         # q4 has bug: https://github.com/ollama/ollama/issues/7938
+    #         - OLLAMA_KV_CACHE_TYPE=q4_0
+    #         # - OLLAMA_KV_CACHE_TYPE=q6_0
+    #         # - OLLAMA_KV_CACHE_TYPE=q8_0
+    #         - OLLAMA_MAX_VRAM=25769803776
+    #         - OLLAMA_KEEP_ALIVE=300
+    #         - OLLAMA_LOAD_TIMEOUT=300
+    #         - GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
+    #         - OLLAMA_NUM_PARALLEL=1
+    #         - OLLAMA_MAX_QUEUE=128
+    #         # - OLLAMA_MAX_VRAM=25769803776
+    #         # - "OLLAMA_KV_CACHE_TYPE=q8_0
+    #         # - "OLLAMA_MAX_VRAM=23192823398
+    #         # 24 GB in bytes 24*(1024^3)
+    #         # - "OLLAMA_MAX_LOADED_MODELS=3"
+    #         # - "OLLAMA_GPU_OVERHEAD=536870912
+    #         # 12 GB in bytes
+    #         # - "OLLAMA_MAX_VRAM=12884901888
+    #     container_name: ollama
+    #     restart: unless-stopped
+    #     image: ollama/ollama:latest
+    #     networks:
+    #         - ollama-docker
+    #     stdin_open: true
+    #     tty: true
     speaches:
         ports:
             - 8004:8000
@@ -449,10 +485,10 @@ services:
             - LOG_LEVEL=INFO
             - CHAT_COMPLETION_BASE_URL=http://ollama:11434
         container_name: speaches
-        restart: unless-stopped            
+        restart: unless-stopped
         image: ghcr.io/speaches-ai/speaches:latest-cuda
         networks:
-          - ollama-docker      
+          - ollama-docker
         stdin_open: true
         tty: true
     searxng:
@@ -534,7 +570,7 @@ services:
             test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
             interval: 30s
             timeout: 10s
-            retries: 3         
+            retries: 3
         container_name: open-webui
         restart: unless-stopped
         image: ghcr.io/open-webui/open-webui:cuda
@@ -547,6 +583,7 @@ networks:
     ollama-docker:
 
 volumes:
+    llama-swap-usr:
     ollama-volume:
     comfy-ui-root:
     dot-cache:
@@ -565,10 +602,10 @@ volumes:
     infinity-cache:
     netdataconfig:
     netdatalib:
-    netdatacache:        
-    vllm-cache:        
+    netdatacache:
+    vllm-cache:
     jupyter-jovyan:
-    jupyter-opt: 
+    jupyter-opt:
     # whisperlive-app:
     # whisperlive-usr:
     # whisper-cache:
@@ -580,8 +617,8 @@ volumes:
     #     volumes:
     #         - /home/alex/ollama-docker-stack/volumes/gptr/my-docs:/usr/src/app/my-docs:rw
     #         - /home/alex/ollama-docker-stack/volumes/gptr/outputs:/usr/src/app/outputs:rw
-    #         - /home/alex/ollama-docker-stack/volumes/gptr/logs:/usr/src/app/logs:rw            
-    #     environment: 
+    #         - /home/alex/ollama-docker-stack/volumes/gptr/logs:/usr/src/app/logs:rw
+    #     environment:
     #         RETRIEVER: "searx"
     #         SEARX_URL: "http://searxng:8080/"
     #         EMBEDDING: "custom:dunzhang/stella_en_400M_v5"
@@ -604,7 +641,7 @@ volumes:
     #     container_name: gpt-researcher
     #     restart: unless-stopped
     #     networks:
-    #         - ollama-docker    
+    #         - ollama-docker
     #     user: root
     #     stdin_open: true
     #     tty: true
@@ -616,7 +653,7 @@ volumes:
     #         - /app/node_modules
     #         - ./frontend/nextjs:/app
     #         - ./frontend/nextjs/.next:/app/.next
-    #         - ./outputs:/app/outputs            
+    #         - ./outputs:/app/outputs
     #     environment:
     #         CHOKIDAR_USEPOLLING: "true"
     #         LOGGING_LEVEL: INFO
@@ -626,7 +663,7 @@ volumes:
     #     container_name: gptr-nextjs
     #     restart: unless-stopped
     #     networks:
-    #         - ollama-docker    
+    #         - ollama-docker
     #     stdin_open: true
     #     tty: true
     # aphrodite-openai:
@@ -667,7 +704,7 @@ volumes:
     #       "--cpu-offload-gb", "60",
     #       "--swap-space", "1",
     #       "--gpu-memory-utilization", "0.99",
-          
+
     #       "--max-model-len", "2048",
     #       "--max-seq-len-to-capture", "2048",
     #       "--max-num-batched-tokens", "2048",
@@ -675,21 +712,21 @@ volumes:
     #       # "--kv-cache-dtype", "fp8",
     #       "--single-user-mode",
     #       "--device", "cuda",
-          
+
     #       # "--speculative-model", "deepcogito/cogito-v1-preview-llama-3B",
     #       # "--num-speculative-tokens", "2",
     #       # "--speculative-draft-tensor-parallel-size", "1",
     #       # "--num-lookahead-slots", "2",
     #       # "--speculative-max-model-len", "16000",
     #       # "--enable-chunked-prefill",
-          
+
     #       # "--enable-prefix-caching",
     #     ]
     #     environment:
     #         - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-    #       # - APHRODITE_FORCE_SINGLE_USER_PREFIX_CACHE=1        
+    #       # - APHRODITE_FORCE_SINGLE_USER_PREFIX_CACHE=1
     #     stdin_open: true
-    #     tty: true     
+    #     tty: true
 
     # tabbyAPI:
     #     ports:
@@ -714,7 +751,7 @@ volumes:
     #     container_name: tabby-api
     #     restart: unless-stopped
     #     networks:
-    #         - ollama-docker    
+    #         - ollama-docker
     #     healthcheck:
     #       test: ["CMD", "curl", "-f", "http://127.0.0.1:5000/health"]
     #       interval: 30s
@@ -729,14 +766,14 @@ volumes:
     #       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
     #     user: root
     #     stdin_open: true
-    #     tty: true    
+    #     tty: true
 
     # pipelines:
     #     ports:
     #         - 8009:9099
     #     deploy:
     #         restart_policy:
-    #             condition: "none"            
+    #             condition: "none"
     #     # runtime: nvidia
     #     # deploy:
     #     #     resources:
@@ -754,9 +791,9 @@ volumes:
     #     #     - PIPELINES_URLS=https://github.com/open-webui/pipelines/blob/main/examples/pipelines/integrations/python_code_pipeline.py"
     #     container_name: pipelines
     #     restart: "no"
-    #     image: ghcr.io/open-webui/pipelines:latest-cuda       
+    #     image: ghcr.io/open-webui/pipelines:latest-cuda
     #     networks:
-    #         - ollama-docker  
+    #         - ollama-docker
 
     # comfyui-cuda:
     #     ports:
@@ -764,7 +801,7 @@ volumes:
     #     runtime: nvidia
     #     deploy:
     #         restart_policy:
-    #             condition: "none"            
+    #             condition: "none"
     #         resources:
     #             reservations:
     #                 devices:
@@ -801,11 +838,11 @@ volumes:
     #     #                   capabilities:
     #     #                       - gpu
     #     container_name: libretranslate
-    #     restart: unless-stopped           
-    #     image: libretranslate/libretranslate:latest  
+    #     restart: unless-stopped
+    #     image: libretranslate/libretranslate:latest
     #     networks:
-    #         - ollama-docker    
-    
+    #         - ollama-docker
+
     # caddy:
     #     container_name: caddy
     #     image: docker.io/library/caddy:2-alpine
@@ -870,10 +907,10 @@ volumes:
     #     environment:
     #         - DISABLE_LOCAL_SAVING=true
     #     container_name: kokoro-fastapi
-    #     restart: unless-stopped         
-    #     image: ghcr.io/remsky/kokoro-fastapi-gpu:latest 
+    #     restart: unless-stopped
+    #     image: ghcr.io/remsky/kokoro-fastapi-gpu:latest
     #     networks:
-    #         - ollama-docker   
+    #         - ollama-docker
 
     # openai-whisper-asr-webservice:
     #     ports:
@@ -894,9 +931,9 @@ volumes:
     #         - ASR_MODEL=tiny
     #         - MODEL_IDLE_TIMEOUT=300
     #     container_name: openai-whisper-asr-webservice
-    #     image: onerahmet/openai-whisper-asr-webservice:latest-gpu      
+    #     image: onerahmet/openai-whisper-asr-webservice:latest-gpu
     #     networks:
-    #         - ollama-docker   
+    #         - ollama-docker
 
     # alltalk-tts:
     #     ports:
@@ -910,7 +947,7 @@ volumes:
     #                     - driver: nvidia
     #                       count: all
     #                       capabilities:
-    #                           - gpu          
+    #                           - gpu
     #     volumes:
     #         - "C:/Users/xfant/ollama-ui-speeches-stack/outputs:/app/outputs/"
     #         - "C:/Users/xfant/ollama-ui-speeches-stack/models:/app/models/"
@@ -939,11 +976,11 @@ volumes:
     #         - whisperlive-usr:/usr
     #     command: bash -c '/usr/bin/python3 run_server.py --port 9090 --backend faster_whisper'
     #     container_name: whisperlive-gpu
-    #     restart: unless-stopped         
-    #     image: ghcr.io/collabora/whisperlive-gpu:latest 
+    #     restart: unless-stopped
+    #     image: ghcr.io/collabora/whisperlive-gpu:latest
     #     networks:
     #         - ollama-docker
-    
+
     # whisperlive-tensorrt:
     #     ports:
     #         - 8008:9090
@@ -961,7 +998,7 @@ volumes:
     #         - whisperlive-usr:/usr
     #     command: bash -c '/usr/bin/python3 run_server.py --port 9090 --backend tensorrt --trt_model_path "/app/TensorRT-LLM-examples/whisper/whisper_small_en_float16" --trt_model_path "/app/TensorRT-LLM-examples/whisper/whisper_small_en_int8" --trt_model_path "/app/TensorRT-LLM-examples/whisper/whisper_small_en_int4"'
     #     container_name: whisperlive-tensorrt
-    #     restart: unless-stopped         
-    #     image: ghcr.io/collabora/whisperlive-tensorrt 
+    #     restart: unless-stopped
+    #     image: ghcr.io/collabora/whisperlive-tensorrt
     #     networks:
     #         - ollama-docker

@@ -1,0 +1,14 @@
+[project]
+name = "reverse-proxy-truncate"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "coloredlogs>=15.0.1",
+    "diskcache>=5.6.3",
+    "fastapi>=0.116.1",
+    "httpx>=0.28.1",
+    "numpy>=2.3.2",
+    "openai>=1.100.2",
+    "tiktoken>=0.11.0",
+    "uvicorn>=0.35.0",
+]

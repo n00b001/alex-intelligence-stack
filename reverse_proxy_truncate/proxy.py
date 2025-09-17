@@ -4,6 +4,7 @@ import os
 import traceback
 from copy import deepcopy
 from dataclasses import dataclass
+from math import ceil
 from typing import Any, AsyncGenerator, Callable, Dict
 
 import coloredlogs
@@ -23,7 +24,7 @@ logger = logging.getLogger("proxy")
 
 @dataclass
 class Config:
-    vllm_url: str = os.getenv("VLLM_URL", "http://hades-ubuntu.arpa:8124/v1")
+    base_url: str = os.getenv("VLLM_URL", "http://hades-ubuntu.arpa:8124/v1")
     port: int = int(os.getenv("PORT", "8123"))
     context_length: int = int(os.getenv("CONTEXT", "90000"))
     max_new_tokens: int = int(os.getenv("MAX_NEW_TOKENS", "20000"))
@@ -47,7 +48,7 @@ config = Config()
 coloredlogs.install(level=config.log_level.upper(), logger=logger)
 
 # Global AsyncOpenAI client for reuse
-global_client = AsyncOpenAI(api_key="dummy", base_url=config.vllm_url)
+global_client = AsyncOpenAI(api_key="dummy", base_url=config.base_url)
 
 # ===============================================================================
 # Tokenization & Truncation Logic
@@ -523,7 +524,7 @@ def truncate_payload_by_percent(
         )
 
         if _token_count(truncated_history) > maximum_prompt_length:
-            logger.debug("Truncating length of each message...")
+            logger.info("Truncating length of each message...")
             for t in truncated_history:
                 content = t.get("content", None)
                 if content is not None:
@@ -542,14 +543,14 @@ def truncate_payload_by_percent(
                             t["content"] = truncated_content
 
         truncated_history_token_count = _token_count(truncated_history)
-        if truncated_history_token_count > maximum_prompt_length:
-            new_percent_of_context = percent_of_context * 0.9
-            logger.debug(
-                f"Truncated prompt is still too large: {truncated_history_token_count} > {maximum_prompt_length} "
-                f"reducing percent context from: {percent_of_context * 100:.3f}% to {new_percent_of_context * 100:.3f}"
-            )
-            percent_of_context = new_percent_of_context
-            continue
+        # if truncated_history_token_count > maximum_prompt_length:
+        #     new_percent_of_context = percent_of_context * 0.9
+        #     logger.debug(
+        #         f"Truncated prompt is still too large: {truncated_history_token_count} > {maximum_prompt_length} "
+        #         f"reducing percent context from: {percent_of_context * 100:.3f}% to {new_percent_of_context * 100:.3f}"
+        #     )
+        #     percent_of_context = new_percent_of_context
+        #     continue
         logger.debug(
             f"Truncated history from {length_of_old_prompt} to {truncated_history_token_count}"
         )
@@ -561,10 +562,15 @@ def truncate_list_based_on_percent(
         percent_of_context: float, prompt_list: list[Any], take_back: bool
 ) -> list:
     len_of_prompt_list = len(prompt_list)
-    number_of_elements_to_keep = int(len_of_prompt_list * percent_of_context)
+    if len_of_prompt_list < 1:
+        raise RuntimeError(f"len_of_prompt_list ({len_of_prompt_list}) < 1")
+    elif len_of_prompt_list == 1:
+        logger.info("Only one message is in the history - so will retain it")
+        return prompt_list
+
+    number_of_elements_to_keep = ceil(len_of_prompt_list * percent_of_context) - 1
     if number_of_elements_to_keep <= 0:
-        # todo: things are bad if this happens
-        logger.debug("I have no other options to make the prompt smaller.")
+        logger.info("I have no other options in truncate_list_based_on_percent to make the prompt smaller.")
         number_of_elements_to_keep = 1
 
     if take_back:
@@ -572,8 +578,15 @@ def truncate_list_based_on_percent(
     else:
         slice_for_lists = slice(0, number_of_elements_to_keep)
 
+    logger.info(
+        f"slice_for_lists: {slice_for_lists}, "
+        f"number_of_elements_to_keep: {number_of_elements_to_keep}, "
+        f"len_of_prompt_list: {len_of_prompt_list}, "
+        f"percent_of_context: {percent_of_context * 100.0}:.2f %, "
+        f"take_back: {take_back}"
+    )
     truncated_history: list = prompt_list[slice_for_lists]
-    logger.debug(f"Truncating list from: {len_of_prompt_list} elements down to: {len(truncated_history)}")
+    logger.info(f"Truncating list from: {len_of_prompt_list} elements down to: {len(truncated_history)}")
     return truncated_history
 
 

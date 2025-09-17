@@ -10,6 +10,7 @@ from consts import Config
 
 class Test(TestCase):
     cfg = Config()
+    cfg.log_level = "DEBUG"
 
     def setUp(self):
         self.encoder = tiktoken.get_encoding("cl100k_base")
@@ -67,6 +68,21 @@ class Test(TestCase):
         pieces = condenser._split_text_into_pieces(text, 1000, self.encoder)
         self.assertEqual(pieces, [text])
 
+    def test__split_text_into_pieces2(self):
+        text = "1" * 2_000
+        pieces = condenser._split_text_into_pieces(text, 1000, self.encoder)
+        self.assertEqual(pieces, [text])
+
+    def test__split_text_into_pieces3(self):
+        text = "1 " * 2_000
+        pieces = condenser._split_text_into_pieces(text, 1000, self.encoder)
+        self.assertEqual(pieces, [text])
+
+    def test__split_text_into_pieces4(self):
+        text = "1\n" * 2_000
+        pieces = condenser._split_text_into_pieces(text, 1000, self.encoder)
+        self.assertEqual(pieces, [text])
+
     def test__make_retry_decorator(self):
         decorator = condenser._make_retry_decorator(attempts=3)
         self.assertTrue(callable(decorator))
@@ -84,6 +100,16 @@ class Test(TestCase):
         self.assertIsInstance(result, str)
         self.assertIn("condensed", result)
 
+    def test__rebuild_history_from_messages(self):
+        msgs = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "world"},
+        ]
+        # The first argument is self or the actual messages object depending on condenser
+        rebuilt = condenser._rebuild_history_from_messages(None, msgs)
+        self.assertIsInstance(rebuilt, list)
+        self.assertEqual(len(rebuilt), 2)
+
     def test_condense(self):
         history = [
             {"role": "user", "content": f"hello world {i} " * 10}
@@ -95,18 +121,103 @@ class Test(TestCase):
                 target_tokens=40000,
                 summarizer=self.fake_proxy_request,
                 model="gpt-4",
+                cfg=self.cfg,
             )
         )
         self.assertIsInstance(result, list)
         # condense returns messages, so check the content
         self.assertTrue(any("condensed" in m["content"] for m in result))
 
-    def test__rebuild_history_from_messages(self):
-        msgs = [
-            {"role": "user", "content": "hello"},
-            {"role": "assistant", "content": "world"},
+    def test_condense2(self):
+        history = [
+            {"role": "user", "content": f"hello world {i} "}
+            for i in range(10_000)
         ]
-        # The first argument is self or the actual messages object depending on condenser
-        rebuilt = condenser._rebuild_history_from_messages(None, msgs)
-        self.assertIsInstance(rebuilt, list)
-        self.assertEqual(len(rebuilt), 2)
+        result = asyncio.run(
+            condenser.condense(
+                history,
+                target_tokens=40000,
+                summarizer=self.fake_proxy_request,
+                model="gpt-4",
+                cfg=self.cfg,
+            )
+        )
+        self.assertIsInstance(result, list)
+        # condense returns messages, so check the content
+        self.assertTrue(any("condensed" in m["content"] for m in result))
+
+    def test_condense3(self):
+        history = [
+            {"role": "user", "content": f"hello world {i} " * 10_000}
+            for i in range(1)
+        ]
+        result = asyncio.run(
+            condenser.condense(
+                history,
+                target_tokens=40000,
+                summarizer=self.fake_proxy_request,
+                model="gpt-4",
+                cfg=self.cfg,
+            )
+        )
+        self.assertIsInstance(result, list)
+        # condense returns messages, so check the content
+        self.assertTrue(any("condensed" in m["content"] for m in result))
+
+    def test_condense4(self):
+        history = [
+            {"role": "user", "content": f"hello world {i} " * 100_000}
+            for i in range(1)
+        ]
+        result = asyncio.run(
+            condenser.condense(
+                history,
+                target_tokens=40000,
+                summarizer=self.fake_proxy_request,
+                model="gpt-4",
+                cfg=self.cfg,
+            )
+        )
+        self.assertIsInstance(result, list)
+        # condense returns messages, so check the content
+        self.assertTrue(any("condensed" in m["content"] for m in result))
+
+    def test_condense5(self):
+        history = [
+            {"role": "user", "content": "1" * 1_000_000}
+            for _ in range(1)
+        ]
+        result = asyncio.run(
+            condenser.condense(
+                history,
+                target_tokens=40000,
+                summarizer=self.fake_proxy_request,
+                model="gpt-4",
+                cfg=self.cfg,
+            )
+        )
+        self.assertIsInstance(result, list)
+        # condense returns messages, so check the content
+        self.assertTrue(any("condensed" in m["content"] for m in result))
+
+    def test_condense6(self):
+        history = [
+            {"role": "user", "content": "1" * 2_000}
+            for _ in range(1)
+        ]
+        cfg = Config()
+        cfg.keep_first_n = 0
+        cfg.keep_last_n = 0
+
+        result = asyncio.run(
+            condenser.condense(
+                history,
+                target_tokens=40000,
+                summarizer=self.fake_proxy_request,
+                model="gpt-4",
+                cfg=cfg,
+            )
+        )
+        self.assertIsInstance(result, list)
+        # condense returns messages, so check the content
+        self.assertTrue(any("condensed" in m["content"] for m in result))

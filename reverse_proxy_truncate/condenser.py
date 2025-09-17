@@ -370,13 +370,18 @@ async def condense(
 
     encoder = _get_encoder_for_model(model)
 
-    logger.info(f"Starting condensation: target_tokens={target_tokens} model={model}")
 
     messages = _normalize_to_message_list(chat_history)
 
     # Count only textual tokens
     total_tokens = sum(_num_tokens(m["content"], encoder) for m in messages if m.get("is_text", True))
-    logger.debug(f"Original total tokens estimate={total_tokens} messages={len(messages)}")
+    logger.info(
+        f"Starting condensation: "
+        f"target_tokens={target_tokens} "
+        f"model={model} "
+        f"original total tokens estimate={total_tokens} "
+        f"messages={len(messages)}"
+    )
     if total_tokens <= target_tokens:
         logger.debug("No condensation required; returning original history")
         return chat_history
@@ -405,7 +410,9 @@ async def condense(
     combined_head_tail = head_tokens + tail_tokens
     if combined_head_tail > target_tokens:
         logger.warning(
-            f"Head+tail tokens ({combined_head_tail}) exceed target ({target_tokens}); summarising head and tail separately")
+            f"Head+tail tokens ({combined_head_tail}) exceed target ({target_tokens}); "
+            f"summarising head and tail separately"
+        )
 
         # Summarise head if present
         if head:

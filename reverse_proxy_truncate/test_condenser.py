@@ -74,14 +74,31 @@ class Test(TestCase):
         self.assertEqual(pieces, [text])
 
     def test__split_text_into_pieces3(self):
-        text = "1 " * 2_000
+        text = ["1"] * 2_000
+        text = " ".join(text)
         pieces = condenser._split_text_into_pieces(text, 1000, self.encoder)
-        self.assertEqual(pieces, [text])
+        split_text = text.replace(" ", " <<<").split("<<<")
+        self.assertEqual(pieces[0], split_text[0])
+        self.assertEqual(pieces[-1], split_text[-1])
+        self.assertEqual(len(pieces), len(split_text))
 
     def test__split_text_into_pieces4(self):
-        text = "1\n" * 2_000
+        text = ["1"] * 2_000
+        text = "\n".join(text)
         pieces = condenser._split_text_into_pieces(text, 1000, self.encoder)
-        self.assertEqual(pieces, [text])
+        split_text = text.replace("\n", "\n<<<").split("<<<")
+        self.assertEqual(pieces[0], split_text[0])
+        self.assertEqual(pieces[-1], split_text[-1])
+        self.assertEqual(len(pieces), len(split_text))
+
+    def test__split_text_into_pieces5(self):
+        text = ["1"] * 10_000
+        text = "\n\n".join(text)
+        pieces = condenser._split_text_into_pieces(text, 1000, self.encoder)
+        split_text = text.replace("\n\n", "\n\n<<<").split("<<<")
+        self.assertEqual(pieces[0], split_text[0])
+        self.assertEqual(pieces[-1], split_text[-1])
+        self.assertEqual(len(pieces), len(split_text))
 
     def test__make_retry_decorator(self):
         decorator = condenser._make_retry_decorator(attempts=3)
@@ -202,7 +219,7 @@ class Test(TestCase):
 
     def test_condense6(self):
         history = [
-            {"role": "user", "content": "1" * 2_000}
+            {"role": "user", "content": "1" * 1_000_000}
             for _ in range(1)
         ]
         cfg = Config()

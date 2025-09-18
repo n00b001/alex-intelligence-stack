@@ -17,12 +17,13 @@ API:
     async def condense(
         chat_history: Any,
         model: str,
-        summarizer: Callable[[str, int], Awaitable[str]],
+        summarizer: SummarizerCallback,
         target_tokens: int,
         cfg: Optional[Config] = None,
     ) -> Any
 
-The summarizer callable must accept (text: str, max_tokens: int) and return a string.
+The summarizer callable must follow the proxy_request signature:
+    async def proxy_request(endpoint: str, payload: dict, streaming: bool, enable_condensation: bool) -> JSONResponse|StreamingResponse|dict
 """
 
 from __future__ import annotations
@@ -59,7 +60,7 @@ _ENCODING_FALLBACK = "cl100k_base"
 
 SummarizerCallback = Callable[
     [str, Dict[str, Any], bool, bool],  # endpoint, payload, streaming, enable_condensation
-    Awaitable[Union[JSONResponse, StreamingResponse, Dict[str, Any]]]
+    Awaitable[Union[JSONResponse, StreamingResponse, Dict[str, Any]]],
 ]
 
 
@@ -223,39 +224,65 @@ def _normalize_to_message_list(history: Any) -> List[Dict[str, Any]]:
 def _split_text_into_pieces(text: str, max_tokens: int, encoder: Optional[Encoding]) -> List[str]:
     """Split a long text into pieces each roughly <= max_tokens.
 
-    Strategy: paragraphs, newlines, sentences, commas, words, characters.
+    Strategy: attempt delimiters in order; only recurse when a delimiter actually splits the text.
+    Guarantees final pieces are <= max_tokens via a final hard-cut by characters.
     """
     if not text:
         return []
     if _num_tokens(text, encoder) <= max_tokens:
         return [text]
 
-    delimiters = ["\n\n", "\n", ". ", ", ", " ", ""]  # last '' -> char-level
+    # Ordered delimiters from largest-granularity to smallest.
+    delimiters = ["\n\n", "\n", ". ", ", ", " ", ""]  # '' -> char-level fallback
 
     pieces = [text]
+
     for delim in delimiters:
         new_pieces: List[str] = []
         for p in pieces:
+            # already small enough
             if _num_tokens(p, encoder) <= max_tokens:
                 new_pieces.append(p)
                 continue
-            if delim != "":
-                parts = p.split(delim)
-                parts = [(seg + (delim if i < len(parts) - 1 else "")) for i, seg in enumerate(parts) if
-                         seg or delim == ""]
-            else:
-                parts = list(p)
-            for sub in parts:
-                if _num_tokens(sub, encoder) <= max_tokens:
-                    new_pieces.append(sub)
+
+            # character-level hard split
+            if delim == "":
+                # final coarse hard-cut by estimated chars-per-token
+                est_tokens = _num_tokens(p, encoder)
+                if est_tokens == 0:
+                    continue
+                chars_per_token = max(1, len(p) // est_tokens)
+                chunk_chars = max(64, chars_per_token * max_tokens)
+                for i in range(0, len(p), chunk_chars):
+                    new_pieces.append(p[i : i + chunk_chars])
+                continue
+
+            # try splitting by delimiter
+            parts = p.split(delim)
+            # if splitting produced just one part identical to p, skip recursion here.
+            if len(parts) == 1:
+                # keep the original piece for the next delimiter
+                new_pieces.append(p)
+                continue
+
+            # otherwise parts provides a genuine reduction; process each part
+            for i, seg in enumerate(parts):
+                # re-add delimiter except for last
+                seg = seg + (delim if i < len(parts) - 1 else "")
+                if not seg:
+                    continue
+                if _num_tokens(seg, encoder) <= max_tokens:
+                    new_pieces.append(seg)
                 else:
-                    # recursive split
-                    new_pieces.extend(_split_text_into_pieces(sub, max_tokens, encoder))
+                    # recurse for this segment. recursion is safe because
+                    # splitting produced multiple parts so segment is strictly smaller
+                    new_pieces.extend(_split_text_into_pieces(seg, max_tokens, encoder))
         pieces = new_pieces
+        # if everything is within budget we are done early
         if all(_num_tokens(x, encoder) <= max_tokens for x in pieces):
             break
 
-    # Final hard-cut by characters if still large
+    # Final safety pass: ensure no piece exceeds max_tokens (hard cut if necessary)
     final: List[str] = []
     for p in pieces:
         if _num_tokens(p, encoder) <= max_tokens:
@@ -267,7 +294,8 @@ def _split_text_into_pieces(text: str, max_tokens: int, encoder: Optional[Encodi
         chars_per_token = max(1, len(p) // est_tokens)
         chunk_chars = max(64, chars_per_token * max_tokens)
         for i in range(0, len(p), chunk_chars):
-            final.append(p[i: i + chunk_chars])
+            final.append(p[i : i + chunk_chars])
+
     return final
 
 
@@ -316,7 +344,10 @@ async def _call_summarizer_with_retries(
             chunks = b""
             async for chunk in response.body_iterator:
                 chunks += chunk
-            data = json.loads(chunks)
+            try:
+                data = json.loads(chunks)
+            except Exception:
+                data = chunks.decode(errors="ignore")
         else:
             data = response
 
@@ -324,8 +355,11 @@ async def _call_summarizer_with_retries(
         if isinstance(data, dict):
             if "content" in data:
                 return str(data["content"])
-            if "choices" in data and isinstance(data["choices"], list) and "message" in data["choices"][0]:
-                return str(data["choices"][0]["message"].get("content", ""))
+            if "choices" in data and isinstance(data["choices"], list) and data["choices"]:
+                first = data["choices"][0]
+                if isinstance(first, dict) and "message" in first:
+                    return str(first["message"].get("content", ""))
+        # fallback to str coercion
         return str(data)
 
     got_response = await _invoke()
@@ -363,25 +397,20 @@ async def condense(
 ) -> Any:
     """Condense chat_history down to approximately target_tokens.
 
-    The summarizer callable must accept (text: str, max_tokens: int) and return a string.
+    The summarizer callable must follow the proxy_request signature and return an extractable object.
     """
     if cfg is None:
         cfg = cfg_default
 
     encoder = _get_encoder_for_model(model)
 
+    logger.info(f"Starting condensation: target_tokens={target_tokens} model={model}")
 
     messages = _normalize_to_message_list(chat_history)
 
     # Count only textual tokens
     total_tokens = sum(_num_tokens(m["content"], encoder) for m in messages if m.get("is_text", True))
-    logger.info(
-        f"Starting condensation: "
-        f"target_tokens={target_tokens} "
-        f"model={model} "
-        f"original total tokens estimate={total_tokens} "
-        f"messages={len(messages)}"
-    )
+    logger.debug(f"Original total tokens estimate={total_tokens} messages={len(messages)}")
     if total_tokens <= target_tokens:
         logger.debug("No condensation required; returning original history")
         return chat_history
@@ -410,9 +439,7 @@ async def condense(
     combined_head_tail = head_tokens + tail_tokens
     if combined_head_tail > target_tokens:
         logger.warning(
-            f"Head+tail tokens ({combined_head_tail}) exceed target ({target_tokens}); "
-            f"summarising head and tail separately"
-        )
+            f"Head+tail tokens ({combined_head_tail}) exceed target ({target_tokens}); summarising head and tail separately")
 
         # Summarise head if present
         if head:

@@ -149,14 +149,41 @@ def _extract_text_from_part(part: Any) -> str:
 
 
 def _normalize_to_message_list(history: Any) -> List[Dict[str, Any]]:
-    """Normalise various request shapes into a message list with metadata.
+    """Normalise various request shapes into a message list with metadata."""
 
-    Each message dict:
-      - role: str
-      - content: str (empty if non-text)
-      - raw: original object for non-text messages (None otherwise)
-      - is_text: bool
-    """
+    def normalize_message(role: str, content: Any) -> Dict[str, Any]:
+        # Case 1: structured list (OpenAI multimodal)
+        if isinstance(content, list) and all(isinstance(c, dict) and "type" in c for c in content):
+            return {
+                "role": role,
+                "content": content,  # preserve structure
+                "raw": None,
+                "is_text": any(c.get("type") == "text" for c in content),
+            }
+
+        # Case 2: plain string
+        if isinstance(content, str):
+            return {"role": role, "content": content, "raw": None, "is_text": True}
+
+        # Case 3: dict that looks like text
+        if isinstance(content, dict):
+            if "type" in content and content["type"] == "text":
+                return {
+                    "role": role,
+                    "content": [content],
+                    "raw": None,
+                    "is_text": True,
+                }
+            # fallback: extract text if possible
+            if "content" in content:
+                return normalize_message(role, content["content"])
+            if "text" in content:
+                return normalize_message(role, content["text"])
+            return {"role": role, "content": "", "raw": content, "is_text": False}
+
+        # Case 4: fallback (numbers, etc.)
+        return {"role": role, "content": str(content), "raw": None, "is_text": True}
+
     messages: List[Dict[str, Any]] = []
     if history is None:
         return messages
@@ -164,33 +191,18 @@ def _normalize_to_message_list(history: Any) -> List[Dict[str, Any]]:
     # OpenAI chat style
     if isinstance(history, dict) and "messages" in history and isinstance(history["messages"], list):
         for m in history["messages"]:
-            if isinstance(m, dict):
-                role = m.get("role", "user")
-                content_part = m.get("content", m.get("text", None))
-                is_text = _is_textual(content_part)
-                content = _extract_text_from_part(content_part) if is_text else ""
-                raw = None if is_text else m
-            else:
-                role = "user"
-                content = _extract_text_from_part(m)
-                is_text = True
-                raw = None
-            messages.append({"role": role, "content": content, "raw": raw, "is_text": is_text})
+            role = m.get("role", "user") if isinstance(m, dict) else "user"
+            content = m.get("content") if isinstance(m, dict) else m
+            messages.append(normalize_message(role, content))
         return messages
 
     # Responses / Completions style
     if isinstance(history, dict) and any(k in history for k in ("input", "prompt", "inputs")):
         key = next(k for k in ("input", "prompt", "inputs") if k in history)
         val = history[key]
-        if isinstance(val, list):
-            for v in val:
-                is_text = _is_textual(v)
-                messages.append({"role": "user", "content": _extract_text_from_part(v) if is_text else "",
-                                 "raw": None if is_text else v, "is_text": is_text})
-        else:
-            is_text = _is_textual(val)
-            messages.append({"role": "user", "content": _extract_text_from_part(val) if is_text else "",
-                             "raw": None if is_text else val, "is_text": is_text})
+        vals = val if isinstance(val, list) else [val]
+        for v in vals:
+            messages.append(normalize_message("user", v))
         return messages
 
     # List form
@@ -198,22 +210,19 @@ def _normalize_to_message_list(history: Any) -> List[Dict[str, Any]]:
         for item in history:
             if isinstance(item, dict) and ("role" in item or "content" in item):
                 role = item.get("role", "user")
-                content_part = item.get("content", item.get("text", item))
-                is_text = _is_textual(content_part)
-                messages.append({"role": role, "content": _extract_text_from_part(content_part) if is_text else "",
-                                 "raw": None if is_text else item, "is_text": is_text})
+                content = item.get("content", item.get("text", item))
+                messages.append(normalize_message(role, content))
             else:
-                is_text = _is_textual(item)
-                messages.append({"role": "user", "content": _extract_text_from_part(item) if is_text else "",
-                                 "raw": None if is_text else item, "is_text": is_text})
+                messages.append(normalize_message("user", item))
         return messages
 
     # Plain string
     if isinstance(history, str):
-        return [{"role": "user", "content": history, "raw": None, "is_text": True}]
+        return [normalize_message("user", history)]
 
     # Fallback
-    return [{"role": "user", "content": _extract_text_from_part(history), "raw": None, "is_text": True}]
+    return [normalize_message("user", history)]
+
 
 
 # ------------------------

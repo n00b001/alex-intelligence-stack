@@ -22,3 +22,4 @@ class Config:
     approx_condensation_tokens: int = int(os.getenv("APPROX_CONDENSATION_TOKENS", "10000"))
     condense_construction_attempts: int = int(os.getenv("CONDENSE_CONSTRUCTION_ATTEMPTS", "10"))
     condense_truncate_retry_attempts: int = int(os.getenv("CONDENSE_TRUNCATE_RETRY_ATTEMPTS", "500"))
+    cache_ttl: int = int(os.getenv("CACHE_TTL", 24 * 60 * 60))

@@ -1,0 +1,6 @@
+[run]
+concurrency = gevent
+
+
+[html]
+directory = htmlcov

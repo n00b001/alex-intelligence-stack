@@ -13,7 +13,9 @@ Features:
 import hashlib
 import json
 import logging
+import sys
 import time
+import traceback
 from typing import Any, Dict, Optional, List, AsyncGenerator
 
 import coloredlogs
@@ -30,9 +32,20 @@ config = Config()
 # ------------------------
 # Logging
 # ------------------------
-
 logger = logging.getLogger("proxy")
 coloredlogs.install(level=config.log_level, logger=logger)
+
+# gunicorn logging settings
+gunicorn_logger = logging.getLogger('gunicorn.error')
+logger.handlers = gunicorn_logger.handlers
+logger.setLevel(config.log_level)
+
+# create custom handler for INFO msg
+stdout_handler = logging.StreamHandler(sys.stdout)
+stdout_handler.setLevel(config.log_level)
+
+logger.addHandler(stdout_handler)
+
 
 # ------------------------
 # Cache
@@ -74,14 +87,15 @@ def clear_cache() -> None:
 
 async def proxy_request(
         endpoint: str,
-        payload: Dict[str, Any],
         streaming: bool,
         enable_condensation: bool = True,
+        payload: Dict[str, Any] = {},
+        verb="POST",
 ) -> JSONResponse | StreamingResponse:
     """
     Proxy a request to the upstream API with cache and fallback on condensation.
     """
-    url = f"{config.base_url}/{endpoint}"
+    url = f"{config.base_url}{endpoint}"
     cache_key = make_cache_key(endpoint, payload)
 
     cached = get_cache(cache_key)
@@ -99,42 +113,52 @@ async def proxy_request(
     while attempt <= config.condense_retry_attempts:
         try:
             if streaming:
-                return await _proxy_stream(url, payload, cache_key)
-            return await _proxy_json(url, payload, cache_key)
+                response = await _proxy_stream(url, payload, cache_key, verb)
+            else:
+                response = await _proxy_json(url, payload, cache_key, verb)
+            if int(response.status_code / 100) != 2:
+                raise RuntimeError(f"Non 2xx status code: {response.body}")
+            return response
         except Exception as e:
             if enable_condensation:
-                logger.error(f"Request failed: {e}. Attempt {attempt + 1}/{config.truncation_retries}")
-                payload = condense(
-                    payload.get("messages", None),
-                    payload.get("model"),
-                    proxy_request,
-                    target_tokens,
-                    config,
-                )
+                logger.error(f"Request failed: {e}. Attempt {attempt + 1}/{config.condense_retry_attempts}")
+                try:
+                    condensed_payload = await condense(
+                        payload.get("messages", None),
+                        payload.get("model"),
+                        proxy_request,
+                        target_tokens,
+                        config,
+                    )
+                    payload["messages"] = condensed_payload
+                except Exception as e:
+                    traceback.print_exc()
+                    logger.warning(f"Got exception trying to condense: {e}")
                 attempt += 1
                 target_tokens = int(target_tokens * config.safety_ratio)
             else:
-                break
+                raise e
 
     logger.critical("All condensation retries failed")
     return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
 
 
-async def _proxy_json(url: str, payload: Dict[str, Any], cache_key: str) -> JSONResponse:
+async def _proxy_json(url: str, payload: Dict[str, Any], cache_key: str, verb) -> JSONResponse:
     async with httpx.AsyncClient(timeout=None) as client:
-        r = await client.post(url, json=payload)
+        r = await client.request(verb, url, json=payload)
         resp_json = r.json()
         if r.status_code == 200:
             set_cache(cache_key, resp_json)
         return JSONResponse(content=resp_json, status_code=r.status_code)
 
 
-async def _proxy_stream(url: str, payload: Dict[str, Any], cache_key: str) -> StreamingResponse:
+async def _proxy_stream(url: str, payload: Dict[str, Any], cache_key: str, verb) -> StreamingResponse:
     stream_chunks: List[str] = []
 
     async def event_generator() -> AsyncGenerator[str, None]:
         async with httpx.AsyncClient(timeout=None) as client:
-            async with client.stream("POST", url, json=payload) as r:
+            # verb = "POST"
+            async with client.stream(verb, url, json=payload) as r:
                 async for line in r.aiter_lines():
                     if line:
                         formatted = line + "\n\n"
@@ -155,24 +179,33 @@ app = FastAPI(title="LLM Proxy", version="1.0.0")
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     body = await request.json()
-    return await proxy_request("chat/completions", body, streaming=body.get("stream", False))
+    return await proxy_request(
+        "/v1/chat/completions", streaming=body.get("stream", False), payload=body
+    )
 
 
 @app.post("/v1/completions")
 async def completions(request: Request):
     body = await request.json()
-    return await proxy_request("completions", body, streaming=body.get("stream", False))
+    return await proxy_request(
+        "/v1/completions", streaming=body.get("stream", False), payload=body
+    )
 
 
 @app.post("/v1/responses")
 async def responses(request: Request):
     body = await request.json()
-    return await proxy_request("responses", body, streaming=body.get("stream", False))
+    return await proxy_request(
+        "/v1/responses", streaming=body.get("stream", False), payload=body
+    )
 
 
+@app.get("/v1/models")
 @app.get("/models")
 async def list_models():
-    return await proxy_request("models", {}, streaming=False)
+    return await proxy_request(
+        "/v1/models", streaming=False, verb="GET"
+    )
 
 
 @app.get("/health")
@@ -191,4 +224,4 @@ async def clear_cache_endpoint():
 # ------------------------
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=config.port, reload=True)
+    uvicorn.run("proxy:app", host="0.0.0.0", port=config.port, reload=True)

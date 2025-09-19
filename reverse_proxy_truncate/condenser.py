@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import logging
+from itertools import batched
 from typing import Any, Awaitable, Callable, Dict, Union
 from typing import List, Optional
 
@@ -58,7 +59,7 @@ coloredlogs.install(level=cfg_default.log_level, logger=logger)
 
 _ENCODING_FALLBACK = "cl100k_base"
 
-SummarizerCallback = Callable[
+ProxyRequestSignature = Callable[
     [str, Dict[str, Any], bool, bool],  # endpoint, payload, streaming, enable_condensation
     Awaitable[Union[JSONResponse, StreamingResponse, Dict[str, Any]]],
 ]
@@ -74,19 +75,16 @@ def _get_encoder_for_model(model: Optional[str]) -> Optional[Encoding]:
     try:
         return tiktoken.encoding_for_model(model) if model else tiktoken.get_encoding(_ENCODING_FALLBACK)
     except Exception:
-        try:
-            return tiktoken.get_encoding(_ENCODING_FALLBACK)
-        except Exception:
-            return None
+        return tiktoken.get_encoding(_ENCODING_FALLBACK)
 
 
-def _num_tokens(text: str, encoder: Optional[Encoding]) -> int:
+def _num_tokens(text: object, encoder: Optional[Encoding]) -> int:
     """Estimate tokens for `text` using tiktoken encoder (required) with conservative fallback."""
     if not text:
         return 0
     if encoder is not None:
         try:
-            return len(encoder.encode(text))
+            return len(encoder.encode(json.dumps(text)))
         except Exception:
             logger.debug("tiktoken encode failed; falling back to char heuristic")
     # Conservative fallback: 1 token per 4 chars
@@ -224,88 +222,32 @@ def _normalize_to_message_list(history: Any) -> List[Dict[str, Any]]:
     return [normalize_message("user", history)]
 
 
-
 # ------------------------
 # Splitting / chunking helpers
 # ------------------------
 
 
 def _split_text_into_pieces(text: str, max_tokens: int, encoder: Optional[Encoding]) -> List[str]:
-    """Split a long text into pieces each roughly <= max_tokens.
+    """Split a long text into pieces each with at most max_tokens tokens.
 
-    Strategy: attempt delimiters in order; only recurse when a delimiter actually splits the text.
-    Guarantees final pieces are <= max_tokens via a final hard-cut by characters.
+    Uses tiktoken to tokenize, then itertools.batched to chunk tokens, then decode back to text.
+    Guarantees no piece exceeds max_tokens.
     """
     if not text:
         return []
-    if _num_tokens(text, encoder) <= max_tokens:
-        return [text]
 
-    # Ordered delimiters from largest-granularity to smallest.
-    delimiters = ["\n\n", "\n", ". ", ", ", " ", ""]  # '' -> char-level fallback
+    tokens = encoder.encode(text)
 
-    pieces = [text]
+    # Split tokens into chunks of at most `max_tokens`
+    token_chunks = batched(tokens, max_tokens)
 
-    for delim in delimiters:
-        new_pieces: List[str] = []
-        for p in pieces:
-            # already small enough
-            if _num_tokens(p, encoder) <= max_tokens:
-                new_pieces.append(p)
-                continue
+    # Decode each chunk back to text
+    pieces = []
+    for chunk in token_chunks:
+        piece = encoder.decode(list(chunk))
+        pieces.append(piece)
 
-            # character-level hard split
-            if delim == "":
-                # final coarse hard-cut by estimated chars-per-token
-                est_tokens = _num_tokens(p, encoder)
-                if est_tokens == 0:
-                    continue
-                chars_per_token = max(1, len(p) // est_tokens)
-                chunk_chars = max(64, chars_per_token * max_tokens)
-                for i in range(0, len(p), chunk_chars):
-                    new_pieces.append(p[i : i + chunk_chars])
-                continue
-
-            # try splitting by delimiter
-            parts = p.split(delim)
-            # if splitting produced just one part identical to p, skip recursion here.
-            if len(parts) == 1:
-                # keep the original piece for the next delimiter
-                new_pieces.append(p)
-                continue
-
-            # otherwise parts provides a genuine reduction; process each part
-            for i, seg in enumerate(parts):
-                # re-add delimiter except for last
-                seg = seg + (delim if i < len(parts) - 1 else "")
-                if not seg:
-                    continue
-                if _num_tokens(seg, encoder) <= max_tokens:
-                    new_pieces.append(seg)
-                else:
-                    # recurse for this segment. recursion is safe because
-                    # splitting produced multiple parts so segment is strictly smaller
-                    new_pieces.extend(_split_text_into_pieces(seg, max_tokens, encoder))
-        pieces = new_pieces
-        # if everything is within budget we are done early
-        if all(_num_tokens(x, encoder) <= max_tokens for x in pieces):
-            break
-
-    # Final safety pass: ensure no piece exceeds max_tokens (hard cut if necessary)
-    final: List[str] = []
-    for p in pieces:
-        if _num_tokens(p, encoder) <= max_tokens:
-            final.append(p)
-            continue
-        est_tokens = _num_tokens(p, encoder)
-        if est_tokens == 0:
-            continue
-        chars_per_token = max(1, len(p) // est_tokens)
-        chunk_chars = max(64, chars_per_token * max_tokens)
-        for i in range(0, len(p), chunk_chars):
-            final.append(p[i : i + chunk_chars])
-
-    return final
+    return pieces
 
 
 # ------------------------
@@ -318,9 +260,8 @@ def _make_retry_decorator(attempts: int):
 
 
 async def _call_summarizer_with_retries(
-        summarizer: SummarizerCallback,
+        proxy_request_callback: ProxyRequestSignature,
         prompt_text: str,
-        max_tokens: int,
         cfg: Config,
         model: str
 ) -> str:
@@ -333,14 +274,14 @@ async def _call_summarizer_with_retries(
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": prompt_text}],
-            "max_tokens": max_tokens,
+            "max_tokens": cfg.approx_condensation_tokens,
             "temperature": 0,
             "seed": 42,
             "top_p": 1,
         }
 
-        response = await summarizer(
-            "/chat/completions",  # endpoint
+        response = await proxy_request_callback(
+            "/v1/chat/completions",  # endpoint
             payload,
             streaming=False,
             enable_condensation=False
@@ -376,20 +317,17 @@ async def _call_summarizer_with_retries(
 
 
 async def _summarize_text_using_summarizer(
-    summarizer: SummarizerCallback,
-    text: str,
-    max_tokens: int,
-    cfg: Config,
-    model: str,
+        proxy_request_callback: ProxyRequestSignature,
+        text: str,
+        cfg: Config,
+        model: str,
 ) -> str:
     instruction = (
         "Summarise the following text concisely and factually.\n"
         "Return a short, self-contained summary suitable to stand in for the full text.\n"
-        "Be deterministic: temperature=0 seed=42 top_1=1.\n\n"
         f"TEXT:\n\n{text}"
     )
-    return await _call_summarizer_with_retries(summarizer, instruction, max_tokens, cfg, model)
-
+    return await _call_summarizer_with_retries(proxy_request_callback, instruction, cfg, model)
 
 
 # ------------------------
@@ -398,15 +336,15 @@ async def _summarize_text_using_summarizer(
 
 
 async def condense(
-    chat_history: Any,
-    model: str,
-    summarizer: SummarizerCallback,
-    target_tokens: int,
-    cfg: Optional[Config] = None,
+        chat_history: Any,
+        model: str,
+        proxy_request_callback: ProxyRequestSignature,
+        target_tokens: int,
+        cfg: Optional[Config] = None,
 ) -> Any:
     """Condense chat_history down to approximately target_tokens.
 
-    The summarizer callable must follow the proxy_request signature and return an extractable object.
+    The proxy_request callable must follow the proxy_request signature and return an extractable object.
     """
     if cfg is None:
         cfg = cfg_default
@@ -418,11 +356,10 @@ async def condense(
     messages = _normalize_to_message_list(chat_history)
 
     # Count only textual tokens
-    total_tokens = sum(_num_tokens(m["content"], encoder) for m in messages if m.get("is_text", True))
+    total_tokens = _num_tokens(chat_history, encoder)
     logger.debug(f"Original total tokens estimate={total_tokens} messages={len(messages)}")
     if total_tokens <= target_tokens:
-        logger.debug("No condensation required; returning original history")
-        return chat_history
+        logger.warning("It seems no condensation required; will condense anyway...")
 
     # Build head and tail by token budget (keep_first_n / keep_last_n)
     remaining = messages[:]
@@ -432,7 +369,7 @@ async def condense(
         m = remaining.pop(0)
         head.append(m)
         if m.get("is_text", True):
-            head_tokens += _num_tokens(m["content"], encoder)
+            head_tokens += _num_tokens(m, encoder)
 
     tail: List[Dict[str, Any]] = []
     tail_tokens = 0
@@ -440,7 +377,7 @@ async def condense(
         m = remaining.pop()
         tail.insert(0, m)
         if m.get("is_text", True):
-            tail_tokens += _num_tokens(m["content"], encoder)
+            tail_tokens += _num_tokens(m, encoder)
 
     logger.debug(f"Kept head_tokens={head_tokens} tail_tokens={tail_tokens} middle_messages={len(remaining)}")
 
@@ -457,8 +394,7 @@ async def condense(
                 head = [{"role": "assistant", "content": "[non-text head content]", "is_text": True, "raw": None}]
                 head_tokens = _num_tokens(head[0]["content"], encoder)
             else:
-                max_head_tokens = max(64, int(target_tokens * 0.4))
-                summary = await _summarize_text_using_summarizer(summarizer, head_text, max_head_tokens, cfg, model)
+                summary = await _summarize_text_using_summarizer(proxy_request_callback, head_text, cfg, model)
                 head = [{"role": "assistant", "content": summary.strip(), "is_text": True, "raw": None}]
                 head_tokens = _num_tokens(head[0]["content"], encoder)
 
@@ -469,8 +405,7 @@ async def condense(
                 tail = [{"role": "assistant", "content": "[non-text tail content]", "is_text": True, "raw": None}]
                 tail_tokens = _num_tokens(tail[0]["content"], encoder)
             else:
-                max_tail_tokens = max(64, int(target_tokens * 0.4))
-                summary = await _summarize_text_using_summarizer(summarizer, tail_text, max_tail_tokens, cfg, model)
+                summary = await _summarize_text_using_summarizer(proxy_request_callback, tail_text, cfg, model)
                 tail = [{"role": "assistant", "content": summary.strip(), "is_text": True, "raw": None}]
                 tail_tokens = _num_tokens(tail[0]["content"], encoder)
 
@@ -511,8 +446,8 @@ async def condense(
 
             if j == i:
                 # single message too big for chunk_budget -> split message
-                subpieces = _split_text_into_pieces(middle_texts[i], chunk_budget, encoder)
-                for sp in subpieces:
+                sub_pieces = _split_text_into_pieces(middle_texts[i], chunk_budget, encoder)
+                for sp in sub_pieces:
                     chunks.append(sp)
                 i += 1
             else:
@@ -527,10 +462,9 @@ async def condense(
         chunk_summaries: List[str] = []
         failed = False
         for idx, chunk in enumerate(chunks):
-            max_summary_tokens = max(64, int(chunk_budget * 0.5))
             try:
                 summary = await _summarize_text_using_summarizer(
-                    summarizer, chunk, max_summary_tokens, cfg, model
+                    proxy_request_callback, chunk, cfg, model
                 )
                 chunk_summaries.append(summary.strip())
                 logger.debug(
@@ -547,10 +481,9 @@ async def condense(
 
         # Final summarise of concatenated chunk summaries
         joined_summaries = "\n\n".join(chunk_summaries)
-        max_final_tokens = max(64, int(target_tokens * 0.6))
         try:
             final_summary = await _summarize_text_using_summarizer(
-                summarizer, joined_summaries, max_final_tokens, cfg, model
+                proxy_request_callback, joined_summaries, cfg, model
             )
         except Exception as exc:  # pragma: no cover - runtime failure
             logger.exception(f"Final summariser step failed: {exc}")

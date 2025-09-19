@@ -23,12 +23,12 @@ class Test(TestCase):
 
     async def run_call_summarizer(self, summarizer):
         return await condenser._call_summarizer_with_retries(
-            summarizer, "prompt text", max_tokens=50, cfg=self.cfg, model="gpt-4"
+            summarizer, "prompt text", cfg=self.cfg, model="gpt-4"
         )
 
     async def run_summarize_text(self, summarizer):
         return await condenser._summarize_text_using_summarizer(
-            summarizer, "hello", max_tokens=50, cfg=self.cfg, model="gpt-4"
+            summarizer, "hello", cfg=self.cfg, model="gpt-4"
         )
 
     # ---------- Tests ----------
@@ -383,7 +383,7 @@ class Test(TestCase):
             condenser.condense(
                 history,
                 target_tokens=40000,
-                summarizer=self.fake_proxy_request,
+                proxy_request_callback=self.fake_proxy_request,
                 model="gpt-4",
                 cfg=self.cfg,
             )
@@ -401,7 +401,7 @@ class Test(TestCase):
             condenser.condense(
                 history,
                 target_tokens=40000,
-                summarizer=self.fake_proxy_request,
+                proxy_request_callback=self.fake_proxy_request,
                 model="gpt-4",
                 cfg=self.cfg,
             )
@@ -419,7 +419,7 @@ class Test(TestCase):
             condenser.condense(
                 history,
                 target_tokens=40000,
-                summarizer=self.fake_proxy_request,
+                proxy_request_callback=self.fake_proxy_request,
                 model="gpt-4",
                 cfg=self.cfg,
             )
@@ -437,7 +437,7 @@ class Test(TestCase):
             condenser.condense(
                 history,
                 target_tokens=40000,
-                summarizer=self.fake_proxy_request,
+                proxy_request_callback=self.fake_proxy_request,
                 model="gpt-4",
                 cfg=self.cfg,
             )
@@ -455,7 +455,7 @@ class Test(TestCase):
             condenser.condense(
                 history,
                 target_tokens=40000,
-                summarizer=self.fake_proxy_request,
+                proxy_request_callback=self.fake_proxy_request,
                 model="gpt-4",
                 cfg=self.cfg,
             )
@@ -477,7 +477,7 @@ class Test(TestCase):
             condenser.condense(
                 history,
                 target_tokens=40000,
-                summarizer=self.fake_proxy_request,
+                proxy_request_callback=self.fake_proxy_request,
                 model="gpt-4",
                 cfg=cfg,
             )
@@ -499,7 +499,7 @@ class Test(TestCase):
             condenser.condense(
                 history,
                 target_tokens=40000,
-                summarizer=self.fake_proxy_request,
+                proxy_request_callback=self.fake_proxy_request,
                 model="gpt-4",
                 cfg=cfg,
             )
@@ -540,7 +540,7 @@ class Test(TestCase):
         result = await condenser.condense(
             history,
             target_tokens=10,  # Force condensation
-            summarizer=failing_summarizer,
+            proxy_request_callback=failing_summarizer,
             model="gpt-4",
             cfg=cfg,
         )
@@ -574,7 +574,7 @@ class Test(TestCase):
         result = await condenser.condense(
             history,
             target_tokens=10,  # Force condensation
-            summarizer=flaky_summarizer,
+            proxy_request_callback=flaky_summarizer,
             model="gpt-4",
             cfg=cfg,
         )
@@ -607,7 +607,7 @@ class Test(TestCase):
             result = asyncio.run(condenser.condense(
                 history,
                 target_tokens=1,  # Force condensation
-                summarizer=fake_summarizer,
+                proxy_request_callback=fake_summarizer,
                 model="unknown-model",
                 cfg=self.cfg,
             ))

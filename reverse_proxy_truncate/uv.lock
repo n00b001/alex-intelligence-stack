@@ -653,6 +653,7 @@ dependencies = [
 dev = [
     { name = "coverage" },
     { name = "gevent" },
+    { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -676,6 +677,7 @@ requires-dist = [
 dev = [
     { name = "coverage", specifier = ">=7.10.6" },
     { name = "gevent", specifier = ">=25.9.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
